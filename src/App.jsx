@@ -4,7 +4,7 @@ import Login from "./pages/login";
 import AdminLayout from "./layouts/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import Trips from "./pages/Trips";
-import Users from "./pages/users";
+import Users from "./pages/Users";
 import Bookings from "./pages/Bookings";
 import Settings from "./pages/Settings";
 
