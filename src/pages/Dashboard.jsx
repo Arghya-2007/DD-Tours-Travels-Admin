@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import api from "../services/api"; // Your Axios instance
 import {
   TrendingUp,
   Users,
@@ -8,6 +9,7 @@ import {
   ArrowDownRight,
   Activity,
   MoreHorizontal,
+  Loader, // Added for loading state
 } from "lucide-react";
 import {
   AreaChart,
@@ -22,53 +24,173 @@ import {
 } from "recharts";
 import { motion } from "framer-motion";
 
-// --- DUMMY DATA ---
-const REVENUE_DATA = [
-  { name: "Jan", revenue: 4000, bookings: 24 },
-  { name: "Feb", revenue: 3000, bookings: 18 },
-  { name: "Mar", revenue: 5000, bookings: 35 },
-  { name: "Apr", revenue: 2780, bookings: 15 },
-  { name: "May", revenue: 1890, bookings: 12 },
-  { name: "Jun", revenue: 2390, bookings: 20 },
-  { name: "Jul", revenue: 3490, bookings: 28 },
-];
-
-const RECENT_ACTIVITY = [
-  {
-    id: 1,
-    user: "Amit Sharma",
-    action: "booked",
-    target: "Darjeeling Escape",
-    time: "2 min ago",
-    amount: "₹15,000",
-  },
-  {
-    id: 2,
-    user: "Priya Das",
-    action: "joined",
-    target: "",
-    time: "1 hour ago",
-    amount: "",
-  },
-  {
-    id: 3,
-    user: "Rahul Roy",
-    action: "cancelled",
-    target: "Sikkim Silk Route",
-    time: "3 hours ago",
-    amount: "",
-  },
-  {
-    id: 4,
-    user: "Sneha G",
-    action: "booked",
-    target: "Sundarbans Tour",
-    time: "5 hours ago",
-    amount: "₹8,500",
-  },
-];
-
 const Dashboard = () => {
+  // --- STATE MANAGEMENT ---
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    revenue: 0,
+    activeBookings: 0,
+    totalUsers: 0,
+    pendingTrips: 0,
+  });
+  const [chartData, setChartData] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [popularDestinations, setPopularDestinations] = useState([]);
+
+  // --- DATA PROCESSING HELPERS ---
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getTimeAgo = (dateString) => {
+    const diff = new Date() - new Date(dateString);
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours} hours ago`;
+    return `${days} days ago`;
+  };
+
+  // --- FETCH DATA ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Parallel Fetch: Bookings and Users
+        // Note: Assuming you have a /users endpoint. If not, we'll estimate from bookings.
+        const [bookingsRes, usersRes] = await Promise.allSettled([
+          api.get("/bookings/all"),
+          api.get("/users"), // Or /api/users/all depending on your route
+        ]);
+
+        const bookings =
+          bookingsRes.status === "fulfilled" ? bookingsRes.value.data : [];
+        const users =
+          usersRes.status === "fulfilled" ? usersRes.value.data : [];
+
+        processDashboardData(bookings, users);
+      } catch (error) {
+        console.error("Dashboard Data Error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const processDashboardData = (bookings, users) => {
+    // 1. CALCULATE TOP STATS
+    const totalRevenue = bookings
+      .filter((b) => b.status === "confirmed")
+      .reduce((acc, curr) => acc + (Number(curr.totalPrice) || 0), 0);
+
+    const activeCount = bookings.filter(
+      (b) => b.status === "confirmed" || b.status === "pending",
+    ).length;
+
+    const pendingCount = bookings.filter((b) => b.status === "pending").length;
+
+    setStats({
+      revenue: totalRevenue,
+      activeBookings: activeCount,
+      totalUsers: users.length || bookings.length, // Fallback to booking count if user fetch fails
+      pendingTrips: pendingCount,
+    });
+
+    // 2. PROCESS CHART DATA (Group by Month)
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const currentYear = new Date().getFullYear();
+
+    // Create a map for the current year's months
+    const chartMap = new Array(12).fill(0).map((_, i) => ({
+      name: months[i],
+      revenue: 0,
+      bookings: 0,
+    }));
+
+    bookings.forEach((b) => {
+      const date = new Date(b.createdAt || b.date); // Fallback to trip date if created missing
+      if (date.getFullYear() === currentYear) {
+        const monthIndex = date.getMonth();
+        chartMap[monthIndex].bookings += 1;
+        if (b.status === "confirmed") {
+          chartMap[monthIndex].revenue += Number(b.totalPrice) || 0;
+        }
+      }
+    });
+
+    // Slice to current month + previous 6 months for cleaner view
+    const currentMonth = new Date().getMonth();
+    const startMonth = Math.max(0, currentMonth - 6);
+    setChartData(chartMap.slice(startMonth, currentMonth + 1));
+
+    // 3. RECENT ACTIVITY (Top 5 newest)
+    const sortedBookings = [...bookings].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+    );
+
+    const activityFeed = sortedBookings.slice(0, 5).map((b) => ({
+      id: b.id,
+      user: b.userDetails?.name || "Guest User",
+      action: b.status === "cancelled" ? "cancelled" : "booked",
+      target: b.tripTitle || "Trip",
+      time: getTimeAgo(b.createdAt),
+      amount: formatCurrency(b.totalPrice),
+    }));
+    setRecentActivity(activityFeed);
+
+    // 4. POPULAR DESTINATIONS
+    const destCounts = {};
+    bookings.forEach((b) => {
+      // Clean title string to group similar trips
+      const title = b.tripTitle || "Unknown Trip";
+      if (!destCounts[title]) {
+        destCounts[title] = { name: title, bookings: 0, revenue: 0 };
+      }
+      destCounts[title].bookings += 1;
+      if (b.status === "confirmed") {
+        destCounts[title].revenue += Number(b.totalPrice) || 0;
+      }
+    });
+
+    // Convert to array, sort by bookings, take top 3
+    const topDestinations = Object.values(destCounts)
+      .sort((a, b) => b.bookings - a.bookings)
+      .slice(0, 3)
+      .map((d, i) => ({
+        ...d,
+        revenue: formatCurrency(d.revenue),
+        color:
+          i === 0
+            ? "bg-blue-500"
+            : i === 1
+              ? "bg-purple-500"
+              : "bg-emerald-500",
+      }));
+
+    setPopularDestinations(topDestinations);
+  };
+
+  // --- ANIMATION VARIANTS ---
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -79,8 +201,16 @@ const Dashboard = () => {
     show: { opacity: 1, y: 0 },
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-900">
+        <Loader className="animate-spin text-blue-500" size={48} />
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-480 mx-auto min-h-screen">
+    <div className="w-full max-w-7xl mx-auto min-h-screen p-4">
       {/* --- HEADER --- */}
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold text-white tracking-tight">
@@ -101,33 +231,33 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <StatCard
             title="Total Revenue"
-            value="₹4,25,000"
-            trend="+12.5%"
+            value={formatCurrency(stats.revenue)}
+            trend="YTD" // Year to Date
             isPositive={true}
             icon={DollarSign}
             color="emerald"
           />
           <StatCard
             title="Active Bookings"
-            value="42"
-            trend="+8.2%"
+            value={stats.activeBookings}
+            trend="Active"
             isPositive={true}
             icon={Calendar}
             color="blue"
           />
           <StatCard
             title="Total Users"
-            value="892"
-            trend="-1.4%"
-            isPositive={false}
+            value={stats.totalUsers}
+            trend="Total"
+            isPositive={true} // Defaulting to positive
             icon={Users}
             color="purple"
           />
           <StatCard
             title="Pending Trips"
-            value="15"
-            trend="Needs Attention"
-            isPositive={null}
+            value={stats.pendingTrips}
+            trend={stats.pendingTrips > 0 ? "Action Needed" : "All Clear"}
+            isPositive={stats.pendingTrips === 0}
             icon={Activity}
             color="amber"
           />
@@ -146,7 +276,7 @@ const Dashboard = () => {
                   Revenue Analytics
                 </h3>
                 <p className="text-sm text-slate-400">
-                  Monthly earnings overview
+                  Monthly earnings overview ({new Date().getFullYear()})
                 </p>
               </div>
               <button className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 transition-colors">
@@ -154,10 +284,9 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* FIXED: Added min-w-0 to container and minWidth to ResponsiveContainer */}
             <div className="h-75 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_DATA}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient
                       id="colorRevenue"
@@ -186,7 +315,7 @@ const Dashboard = () => {
                     stroke="#94a3b8"
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(value) => `₹${value}`}
+                    tickFormatter={(value) => `₹${value / 1000}k`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -196,6 +325,7 @@ const Dashboard = () => {
                       color: "#fff",
                     }}
                     itemStyle={{ color: "#fff" }}
+                    formatter={(value) => formatCurrency(value)}
                   />
                   <Area
                     type="monotone"
@@ -222,10 +352,9 @@ const Dashboard = () => {
               Trips booked per month
             </p>
 
-            {/* FIXED: Added min-w-0 to container */}
             <div className="h-75 w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={REVENUE_DATA}>
+                <BarChart data={chartData}>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke="#334155"
@@ -274,50 +403,57 @@ const Dashboard = () => {
             </div>
 
             <div className="space-y-6">
-              {RECENT_ACTIVITY.map((item) => (
-                <div key={item.id} className="flex gap-4 items-start">
-                  <div
-                    className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
-                      item.action === "booked"
-                        ? "bg-emerald-500"
-                        : item.action === "cancelled"
-                          ? "bg-red-500"
-                          : "bg-blue-500"
-                    }`}
-                  />
+              {recentActivity.length === 0 ? (
+                <p className="text-slate-500 text-sm">
+                  No recent activity found.
+                </p>
+              ) : (
+                recentActivity.map((item) => (
+                  <div key={item.id} className="flex gap-4 items-start">
+                    <div
+                      className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
+                        item.action === "booked"
+                          ? "bg-emerald-500"
+                          : item.action === "cancelled"
+                            ? "bg-red-500"
+                            : "bg-blue-500"
+                      }`}
+                    />
 
-                  <div className="flex-1">
-                    <p className="text-sm text-slate-300">
-                      <span className="font-bold text-white">{item.user}</span>{" "}
-                      {item.action === "booked" && (
-                        <span className="text-emerald-400">booked a trip</span>
-                      )}
-                      {item.action === "cancelled" && (
-                        <span className="text-red-400">cancelled booking</span>
-                      )}
-                      {item.action === "joined" && (
-                        <span className="text-blue-400">
-                          created an account
-                        </span>
-                      )}
-                    </p>
-                    {item.target && (
-                      <p className="text-xs font-bold text-slate-500 mt-1">
-                        {item.target}
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-300">
+                        <span className="font-bold text-white">
+                          {item.user}
+                        </span>{" "}
+                        {item.action === "booked" && (
+                          <span className="text-emerald-400">
+                            booked a trip
+                          </span>
+                        )}
+                        {item.action === "cancelled" && (
+                          <span className="text-red-400">
+                            cancelled booking
+                          </span>
+                        )}
                       </p>
-                    )}
-                  </div>
+                      {item.target && (
+                        <p className="text-xs font-bold text-slate-500 mt-1">
+                          {item.target}
+                        </p>
+                      )}
+                    </div>
 
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500">{item.time}</p>
-                    {item.amount && (
-                      <p className="text-sm font-bold text-white mt-1">
-                        {item.amount}
-                      </p>
-                    )}
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">{item.time}</p>
+                      {item.amount && (
+                        <p className="text-sm font-bold text-white mt-1">
+                          {item.amount}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </motion.div>
 
@@ -330,49 +466,36 @@ const Dashboard = () => {
               Trending Destinations
             </h3>
             <div className="space-y-4">
-              {[
-                {
-                  name: "Darjeeling",
-                  bookings: 142,
-                  revenue: "₹2.1L",
-                  color: "bg-blue-500",
-                },
-                {
-                  name: "Sikkim",
-                  bookings: 98,
-                  revenue: "₹1.8L",
-                  color: "bg-purple-500",
-                },
-                {
-                  name: "Sundarbans",
-                  bookings: 65,
-                  revenue: "₹85k",
-                  color: "bg-emerald-500",
-                },
-              ].map((dest, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-700/30 border border-slate-700 hover:bg-slate-700/50 transition-colors"
-                >
+              {popularDestinations.length === 0 ? (
+                <p className="text-slate-500 text-sm">No trending data yet.</p>
+              ) : (
+                popularDestinations.map((dest, i) => (
                   <div
-                    className={`w-12 h-12 rounded-xl ${dest.color} bg-opacity-20 flex items-center justify-center text-white font-bold`}
+                    key={i}
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-slate-700/30 border border-slate-700 hover:bg-slate-700/50 transition-colors"
                   >
-                    {i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-white">{dest.name}</h4>
-                    <p className="text-xs text-slate-400">
-                      {dest.bookings} bookings this month
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-white">{dest.revenue}</p>
-                    <div className="flex items-center gap-1 text-emerald-400 text-xs">
-                      <TrendingUp size={12} /> +12%
+                    <div
+                      className={`w-12 h-12 rounded-xl ${dest.color} bg-opacity-20 flex items-center justify-center text-white font-bold`}
+                    >
+                      {i + 1}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white truncate max-w-37.5">
+                        {dest.name}
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        {dest.bookings} bookings total
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-white">{dest.revenue}</p>
+                      <div className="flex items-center gap-1 text-emerald-400 text-xs">
+                        <TrendingUp size={12} /> Top {i + 1}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </motion.div>
         </div>
@@ -420,7 +543,11 @@ const StatCard = ({ title, value, trend, isPositive, icon: Icon, color }) => {
       <p className="text-slate-400 font-medium text-sm">{title}</p>
 
       <div
-        className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${colorMap[color].split(" ")[0].replace("/10", "")}`}
+        className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${colorMap[
+          color
+        ]
+          .split(" ")[0]
+          .replace("/10", "")}`}
       />
     </motion.div>
   );
