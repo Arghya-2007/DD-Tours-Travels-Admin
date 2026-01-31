@@ -1,7 +1,7 @@
 import api from "./api";
 
 export const fetchTrips = async () => {
-  const response = await api.get("/trips/all");
+  const response = await api.get("/trips");
   return response.data;
 };
 
