@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import api from "../services/api"; // Ensure you have your Axios instance here
 import {
   Search,
   Calendar,
@@ -7,107 +8,71 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Trash2,
   Filter,
   TrendingUp,
-  Users,
   AlertCircle,
+  Loader,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "react-hot-toast";
 
-// --- DUMMY DATA GENERATOR ---
-const INITIAL_BOOKINGS = [
-  {
-    id: "BK-7829",
-    tripTitle: "Darjeeling Himalayan Escape",
-    customerName: "Rahul Sharma",
-    customerEmail: "rahul.s@example.com",
-    guests: 2,
-    totalPrice: 24000,
-    status: "pending", // pending, confirmed, cancelled
-    tripDate: "2026-03-15",
-    bookedAt: "2026-01-28",
-    paymentMethod: "UPI",
-  },
-  {
-    id: "BK-7830",
-    tripTitle: "Sikkim Silk Route Adventure",
-    customerName: "Priya Das",
-    customerEmail: "priya.d@example.com",
-    guests: 4,
-    totalPrice: 56000,
-    status: "confirmed",
-    tripDate: "2026-04-10",
-    bookedAt: "2026-01-25",
-    paymentMethod: "Credit Card",
-  },
-  {
-    id: "BK-7831",
-    tripTitle: "Sundarbans Jungle Safari",
-    customerName: "Amit Verma",
-    customerEmail: "amit.v88@example.com",
-    guests: 1,
-    totalPrice: 8500,
-    status: "cancelled",
-    tripDate: "2026-02-05",
-    bookedAt: "2026-01-20",
-    paymentMethod: "Net Banking",
-  },
-  {
-    id: "BK-7832",
-    tripTitle: "Darjeeling Himalayan Escape",
-    customerName: "Sneha Roy",
-    customerEmail: "sneha.roy@example.com",
-    guests: 2,
-    totalPrice: 24000,
-    status: "confirmed",
-    tripDate: "2026-03-20",
-    bookedAt: "2026-01-29",
-    paymentMethod: "UPI",
-  },
-  {
-    id: "BK-7833",
-    tripTitle: "Gangtok & North Sikkim",
-    customerName: "Vikram Singh",
-    customerEmail: "vikram.s@example.com",
-    guests: 6,
-    totalPrice: 82000,
-    status: "pending",
-    tripDate: "2026-05-01",
-    bookedAt: "2026-01-30",
-    paymentMethod: "Cash",
-  },
-];
-
 const Bookings = () => {
-  const [bookings, setBookings] = useState(INITIAL_BOOKINGS);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  // --- ACTIONS ---
-  const handleStatusChange = (id, newStatus) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b)),
-    );
-    if (newStatus === "confirmed") toast.success("Booking Confirmed!");
-    if (newStatus === "cancelled") toast.error("Booking Cancelled");
-  };
+  // --- 1. FETCH REAL DATA ---
+  useEffect(() => {
+    fetchBookings();
+  }, []);
 
-  const handleDelete = (id) => {
-    if (confirm("Delete this booking record permanently?")) {
-      setBookings((prev) => prev.filter((b) => b.id !== id));
-      toast.success("Record deleted");
+  const fetchBookings = async () => {
+    try {
+      const res = await api.get("/bookings/all");
+      // Backend returns an array directly: res.data
+      setBookings(res.data);
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      toast.error("Failed to load bookings");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --- CALCULATIONS & FILTERING ---
+  // --- 2. HANDLE STATUS UPDATE ---
+  const handleStatusChange = async (id, newStatus) => {
+    // Optimistic Update (Update UI immediately)
+    const oldBookings = [...bookings];
+    setBookings((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b)),
+    );
+
+    try {
+      await api.put(`/bookings/status/${id}`, { status: newStatus });
+
+      if (newStatus === "confirmed") toast.success("Booking Confirmed!");
+      if (newStatus === "cancelled") toast.error("Booking Cancelled");
+    } catch (error) {
+      // Revert if failed
+      setBookings(oldBookings);
+      toast.error("Update failed. Please try again.");
+      console.error(error);
+    }
+  };
+
+  // --- 3. CALCULATIONS & FILTERING ---
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {
+      // Safe access to nested userDetails
+      const userName = booking.userDetails?.name || "Unknown";
+      const tripTitle = booking.tripTitle || "Untitled Trip";
+      const bookingId = booking.id || "";
+
       const matchesSearch =
-        booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.tripTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tripTitle.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus =
         statusFilter === "all" || booking.status === statusFilter;
@@ -118,8 +83,8 @@ const Bookings = () => {
 
   const stats = useMemo(() => {
     const totalRevenue = bookings
-      .filter((b) => b.status !== "cancelled")
-      .reduce((sum, b) => sum + b.totalPrice, 0);
+      .filter((b) => b.status === "confirmed") // Only count confirmed revenue
+      .reduce((sum, b) => sum + (Number(b.totalPrice) || 0), 0);
 
     return {
       revenue: totalRevenue,
@@ -144,15 +109,17 @@ const Bookings = () => {
 
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${styles[status]} capitalize`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
+          styles[status] || styles.pending
+        } capitalize`}
       >
-        {icons[status]} {status}
+        {icons[status] || icons.pending} {status}
       </span>
     );
   };
 
   return (
-    <div className="w-full max-w-480 mx-auto min-h-[80vh]">
+    <div className="w-full max-w-7xl mx-auto min-h-[80vh] p-6">
       <Toaster
         position="bottom-right"
         toastOptions={{
@@ -168,7 +135,7 @@ const Bookings = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         {[
           {
-            label: "Total Revenue",
+            label: "Confirmed Revenue",
             value: `₹${stats.revenue.toLocaleString()}`,
             icon: TrendingUp,
             color: "text-emerald-400",
@@ -263,118 +230,132 @@ const Bookings = () => {
       </div>
 
       {/* --- BOOKINGS LIST --- */}
-      <motion.div
-        layout
-        className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6"
-      >
-        <AnimatePresence>
-          {filteredBookings.map((booking) => (
-            <motion.div
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              key={booking.id}
-              className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-lg hover:border-slate-600 hover:shadow-xl transition-all group relative overflow-hidden"
-            >
-              {/* Top Row: ID & Status */}
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Booking ID
-                  </span>
-                  <span className="font-mono text-white font-bold bg-slate-900 px-2 py-1 rounded text-sm border border-slate-700/50 w-fit">
-                    {booking.id}
-                  </span>
-                </div>
-                <StatusBadge status={booking.status} />
-              </div>
-
-              {/* Middle: Trip Info */}
-              <div className="mb-6">
-                <h3 className="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
-                  {booking.tripTitle}
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 text-sm text-slate-400">
-                    <User size={16} className="text-slate-500" />
-                    <span className="text-slate-300 font-medium">
-                      {booking.customerName}
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <Loader className="animate-spin text-blue-500" size={40} />
+        </div>
+      ) : (
+        <motion.div
+          layout
+          className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6"
+        >
+          <AnimatePresence>
+            {filteredBookings.map((booking) => (
+              <motion.div
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                key={booking.id}
+                className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-lg hover:border-slate-600 hover:shadow-xl transition-all group relative overflow-hidden"
+              >
+                {/* Top Row: ID & Status */}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Booking ID
                     </span>
-                    <span className="text-slate-600">•</span>
-                    <span>{booking.guests} Guests</span>
+                    <span className="font-mono text-white font-bold bg-slate-900 px-2 py-1 rounded text-sm border border-slate-700/50 w-fit">
+                      {booking.id.slice(0, 8)}... {/* Shorten ID for display */}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-slate-400">
-                    <Calendar size={16} className="text-slate-500" />
-                    <span>
-                      Trip Date:{" "}
+                  <StatusBadge status={booking.status} />
+                </div>
+
+                {/* Middle: Trip Info */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-white mb-2 group-hover:text-blue-400 transition-colors truncate">
+                    {booking.tripTitle || "Unknown Trip"}
+                  </h3>
+                  <div className="space-y-2">
+                    {/* User Name & Guests */}
+                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                      <User size={16} className="text-slate-500" />
                       <span className="text-slate-300 font-medium">
-                        {booking.tripDate}
+                        {booking.userDetails?.name || "Guest User"}
                       </span>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm text-slate-400">
-                    <CreditCard size={16} className="text-slate-500" />
-                    <span>
-                      Total:{" "}
-                      <span className="text-emerald-400 font-bold text-base">
-                        ₹{booking.totalPrice.toLocaleString()}
+                      <span className="text-slate-600">•</span>
+                      <span>{booking.seats || booking.guests || 1} Seats</span>
+                    </div>
+
+                    {/* Date */}
+                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                      <Calendar size={16} className="text-slate-500" />
+                      <span>
+                        Date:{" "}
+                        <span className="text-slate-300 font-medium">
+                          {booking.tripDate || booking.date || "TBD"}
+                        </span>
                       </span>
-                    </span>
-                    <span className="text-xs bg-slate-700 px-1.5 rounded text-slate-300 ml-auto">
-                      {booking.paymentMethod}
-                    </span>
+                    </div>
+
+                    {/* Price & Method */}
+                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                      <CreditCard size={16} className="text-slate-500" />
+                      <span>
+                        Total:{" "}
+                        <span className="text-emerald-400 font-bold text-base">
+                          ₹{(booking.totalPrice || 0).toLocaleString()}
+                        </span>
+                      </span>
+                      <span className="text-xs bg-slate-700 px-1.5 rounded text-slate-300 ml-auto capitalize">
+                        {booking.userDetails?.paymentMethod?.replace(
+                          /_/g,
+                          " ",
+                        ) || "Pay Later"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Bottom: Actions */}
-              <div className="flex gap-3 pt-4 border-t border-slate-700">
-                {booking.status === "pending" && (
-                  <>
-                    <button
-                      onClick={() =>
-                        handleStatusChange(booking.id, "confirmed")
-                      }
-                      className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <CheckCircle size={16} /> Confirm
-                    </button>
+                {/* Bottom: Actions */}
+                <div className="flex gap-3 pt-4 border-t border-slate-700">
+                  {booking.status === "pending" && (
+                    <>
+                      <button
+                        onClick={() =>
+                          handleStatusChange(booking.id, "confirmed")
+                        }
+                        className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <CheckCircle size={16} /> Confirm
+                      </button>
+                      <button
+                        onClick={() =>
+                          handleStatusChange(booking.id, "cancelled")
+                        }
+                        className="flex-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <XCircle size={16} /> Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {booking.status === "confirmed" && (
                     <button
                       onClick={() =>
                         handleStatusChange(booking.id, "cancelled")
                       }
-                      className="flex-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                      className="flex-1 bg-slate-700 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
                     >
-                      <XCircle size={16} /> Cancel
+                      <XCircle size={16} /> Cancel Booking
                     </button>
-                  </>
-                )}
+                  )}
 
-                {booking.status === "confirmed" && (
-                  <button
-                    onClick={() => handleStatusChange(booking.id, "cancelled")}
-                    className="flex-1 bg-slate-700 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <XCircle size={16} /> Cancel Booking
-                  </button>
-                )}
-
-                {/* Delete is always available */}
-                <button
-                  onClick={() => handleDelete(booking.id)}
-                  className="w-10 flex items-center justify-center rounded-xl bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </motion.div>
+                  {booking.status === "cancelled" && (
+                    <div className="w-full text-center text-slate-500 text-sm py-2 font-medium italic">
+                      Booking Cancelled
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
       {/* Empty State */}
-      {filteredBookings.length === 0 && (
+      {!loading && filteredBookings.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
