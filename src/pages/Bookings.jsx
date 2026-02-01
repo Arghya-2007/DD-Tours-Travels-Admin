@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import api from "../services/api"; // Check your path
+import api from "../../services/api";
 import {
   Search,
   Calendar,
@@ -28,11 +28,43 @@ const Bookings = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  // Modal State
   const [selectedBooking, setSelectedBooking] = useState(null);
 
-  // --- 1. FETCH DATA ---
+  // --- 1. DATA NORMALIZER (CRITICAL FIX) ---
+  // This converts different DB models into one standard format for the UI
+  const normalizeBooking = (b) => {
+    const details = b.userDetails || {};
+
+    return {
+      id: b.id || b._id, // Handle MongoDB _id or id
+      originalData: b, // Keep raw data for updates
+
+      // Standardized Fields
+      customerName: details.name || details.fullName || "Unknown User",
+      phone: details.phone || "N/A",
+      email: details.email || "N/A",
+      address: details.address || "N/A",
+      aadhar: details.aadhar || details.aadharNo || "N/A", // Handles both formats
+
+      tripTitle: b.tripTitle || "Unknown Trip",
+      date: b.bookingDate || b.tripDate || b.createdAt, // Prioritize Booking Date
+      seats: b.seats || 1,
+
+      // Price Logic
+      amount: b.totalAmount || b.totalPrice || b.amountPaid || 0,
+
+      // Status & Payment
+      status: b.status || "pending",
+      paymentMethod:
+        b.paymentMethod === "online"
+          ? "Online (Razorpay)"
+          : details.paymentMethod || "Pay on Arrival",
+      paymentId: b.paymentId || "Pending / Cash",
+      orderId: b.orderId || "-",
+      gateway: b.gateway || "Manual",
+    };
+  };
+
   useEffect(() => {
     fetchBookings();
   }, []);
@@ -40,10 +72,11 @@ const Bookings = () => {
   const fetchBookings = async () => {
     try {
       const res = await api.get("/bookings/all");
-      // Sort: Newest First
+      // Sort by newest first using createdAt or date
       const sorted = res.data.sort(
         (a, b) =>
-          new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date),
+          new Date(b.createdAt || b.bookingDate || b.tripDate) -
+          new Date(a.createdAt || a.bookingDate || a.tripDate),
       );
       setBookings(sorted);
     } catch (error) {
@@ -54,7 +87,6 @@ const Bookings = () => {
     }
   };
 
-  // --- 2. ACTIONS: UPDATE STATUS ---
   const handleStatusChange = async (id, newStatus) => {
     const oldBookings = [...bookings];
     setBookings((prev) =>
@@ -72,7 +104,6 @@ const Bookings = () => {
     }
   };
 
-  // --- 3. ACTIONS: DELETE ---
   const handleDelete = async (id) => {
     if (
       !window.confirm(
@@ -80,21 +111,18 @@ const Bookings = () => {
       )
     )
       return;
-
     const oldBookings = [...bookings];
     setBookings((prev) => prev.filter((b) => b.id !== id));
-
     try {
       await api.delete(`/bookings/${id}`);
       toast.success("Record permanently erased.");
-      setSelectedBooking(null); // Close modal if open
+      setSelectedBooking(null);
     } catch (error) {
       setBookings(oldBookings);
       toast.error("Deletion failed.");
     }
   };
 
-  // --- 4. ACTIONS: EXPORT TO CSV ---
   const exportCSV = () => {
     const headers = [
       "ID",
@@ -106,62 +134,50 @@ const Bookings = () => {
       "Status",
       "Payment ID",
     ];
-
-    const rows = bookings.map((b) => [
-      b.id,
-      b.userDetails?.name || "N/A",
-      b.userDetails?.phone || "N/A",
-      b.tripTitle,
-      b.bookingDate,
-      b.totalAmount || b.totalPrice,
-      b.status,
-      b.paymentId || "Cash/Pending",
-    ]);
+    const rows = bookings.map((raw) => {
+      const b = normalizeBooking(raw);
+      return [
+        b.id,
+        b.customerName,
+        b.phone,
+        b.tripTitle,
+        new Date(b.date).toLocaleDateString(),
+        b.amount,
+        b.status,
+        b.paymentId,
+      ];
+    });
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `bookings_export_${new Date().toISOString().split("T")[0]}.csv`,
-    );
+    link.setAttribute("download", `dd_tours_export.csv`);
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
   };
 
-  // --- 5. FILTERS ---
   const filteredBookings = useMemo(() => {
-    return bookings.filter((booking) => {
-      const userName = booking.userDetails?.name || "";
-      const tripTitle = booking.tripTitle || "";
-      const bookingId = booking.id || "";
+    return bookings.map(normalizeBooking).filter((b) => {
       const lowerSearch = searchTerm.toLowerCase();
-
       const matchesSearch =
-        userName.toLowerCase().includes(lowerSearch) ||
-        bookingId.toLowerCase().includes(lowerSearch) ||
-        tripTitle.toLowerCase().includes(lowerSearch);
+        b.customerName.toLowerCase().includes(lowerSearch) ||
+        b.id.toLowerCase().includes(lowerSearch) ||
+        b.tripTitle.toLowerCase().includes(lowerSearch);
 
-      const matchesStatus =
-        statusFilter === "all" || booking.status === statusFilter;
-
+      const matchesStatus = statusFilter === "all" || b.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [bookings, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
+    const normalized = bookings.map(normalizeBooking);
     return {
-      revenue: bookings
+      revenue: normalized
         .filter((b) => b.status === "confirmed")
-        .reduce(
-          (sum, b) => sum + (Number(b.totalAmount || b.totalPrice) || 0),
-          0,
-        ),
+        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
       total: bookings.length,
       pending: bookings.filter((b) => b.status === "pending").length,
       confirmed: bookings.filter((b) => b.status === "confirmed").length,
@@ -175,7 +191,7 @@ const Bookings = () => {
         toastOptions={{ style: { background: "#1E293B", color: "#fff" } }}
       />
 
-      {/* --- DASHBOARD STATS --- */}
+      {/* --- STATS --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         {[
           {
@@ -207,10 +223,7 @@ const Bookings = () => {
             bg: "bg-purple-500/10",
           },
         ].map((stat, index) => (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
+          <div
             key={index}
             className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg flex items-center gap-4"
           >
@@ -225,7 +238,7 @@ const Bookings = () => {
               </p>
               <h3 className="text-2xl font-bold text-white">{stat.value}</h3>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
@@ -238,9 +251,6 @@ const Bookings = () => {
               {bookings.length}
             </span>
           </h1>
-          <p className="text-slate-400 mt-2 font-medium">
-            Manage customer reservations and payments.
-          </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
@@ -250,7 +260,6 @@ const Bookings = () => {
           >
             <Download size={16} /> Export CSV
           </button>
-
           <div className="relative group w-full sm:w-64">
             <Search
               className="absolute left-4 top-3 text-slate-500"
@@ -273,9 +282,9 @@ const Bookings = () => {
           <button
             key={tab}
             onClick={() => setStatusFilter(tab)}
-            className={`px-5 py-2 rounded-full text-sm font-bold capitalize whitespace-nowrap transition-all border ${
+            className={`px-5 py-2 rounded-full text-sm font-bold capitalize transition-all border ${
               statusFilter === tab
-                ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20"
+                ? "bg-blue-600 border-blue-500 text-white"
                 : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800"
             }`}
           >
@@ -292,21 +301,20 @@ const Bookings = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <AnimatePresence>
-            {filteredBookings.map((booking) => (
+            {filteredBookings.map((b) => (
               <motion.div
                 layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                key={booking.id}
-                className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl group relative overflow-hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                key={b.id}
+                className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl relative overflow-hidden"
               >
-                {/* Status Stripe */}
                 <div
                   className={`absolute top-0 left-0 w-1 h-full ${
-                    booking.status === "confirmed"
+                    b.status === "confirmed"
                       ? "bg-emerald-500"
-                      : booking.status === "cancelled"
+                      : b.status === "cancelled"
                         ? "bg-rose-500"
                         : "bg-amber-500"
                   }`}
@@ -315,50 +323,42 @@ const Bookings = () => {
                 <div className="flex justify-between items-start mb-4 pl-3">
                   <div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      ID: {booking.id.slice(0, 8)}
+                      ID: {b.id.slice(0, 8)}
                     </span>
                     <h3 className="text-lg font-bold text-white truncate max-w-[200px]">
-                      {booking.tripTitle}
+                      {b.tripTitle}
                     </h3>
                   </div>
-                  <StatusBadge status={booking.status} />
+                  <StatusBadge status={b.status} />
                 </div>
 
                 <div className="space-y-3 mb-6 pl-3">
                   <div className="flex items-center gap-3 text-sm text-slate-400">
-                    <User size={16} /> {booking.userDetails?.name}
+                    <User size={16} /> {b.customerName}
                   </div>
                   <div className="flex items-center gap-3 text-sm text-slate-400">
                     <Calendar size={16} />{" "}
-                    {new Date(
-                      booking.bookingDate || booking.date,
-                    ).toLocaleDateString()}
+                    {new Date(b.date).toLocaleDateString()}
                   </div>
                   <div className="flex items-center gap-3 text-sm text-slate-400">
                     <CreditCard size={16} />
                     <span className="text-white font-bold">
-                      ₹
-                      {(
-                        booking.totalAmount || booking.totalPrice
-                      ).toLocaleString()}
+                      ₹{Number(b.amount).toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex gap-2 pl-3">
                   <button
-                    onClick={() => setSelectedBooking(booking)}
-                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-blue-400 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-slate-700"
+                    onClick={() => setSelectedBooking(b)}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-blue-400 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 border border-slate-700"
                   >
                     <Eye size={16} /> Details
                   </button>
-                  {booking.status === "pending" && (
+                  {b.status === "pending" && (
                     <button
-                      onClick={() =>
-                        handleStatusChange(booking.id, "confirmed")
-                      }
+                      onClick={() => handleStatusChange(b.id, "confirmed")}
                       className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 p-2 rounded-lg border border-emerald-500/20"
-                      title="Quick Confirm"
                     >
                       <CheckCircle size={18} />
                     </button>
@@ -370,31 +370,19 @@ const Bookings = () => {
         </div>
       )}
 
-      {!loading && filteredBookings.length === 0 && (
-        <div className="text-center py-20 text-slate-500">
-          <Filter size={48} className="mx-auto mb-4 opacity-50" />
-          <p>No bookings found.</p>
-        </div>
-      )}
-
       {/* --- DETAILED MODAL --- */}
       <AnimatePresence>
         {selectedBooking && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               className="absolute inset-0 bg-black/80 backdrop-blur-sm"
               onClick={() => setSelectedBooking(null)}
             />
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
               className="relative bg-slate-900 w-full max-w-2xl rounded-3xl border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
-              {/* Modal Header */}
               <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950">
                 <div>
                   <h2 className="text-xl font-bold text-white">
@@ -412,163 +400,117 @@ const Bookings = () => {
                 </button>
               </div>
 
-              {/* Modal Content */}
               <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
-                {/* Section 1: Trip Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <p className="text-slate-500 text-xs uppercase mb-1">
-                      Expedition
-                    </p>
-                    <p className="text-white font-bold">
-                      {selectedBooking.tripTitle}
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <p className="text-slate-500 text-xs uppercase mb-1">
-                      Date
-                    </p>
-                    <p className="text-white font-bold">
-                      {new Date(
-                        selectedBooking.bookingDate,
-                      ).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <p className="text-slate-500 text-xs uppercase mb-1">
-                      Team Size
-                    </p>
-                    <p className="text-white font-bold">
-                      {selectedBooking.seats || 1} People
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <p className="text-slate-500 text-xs uppercase mb-1">
-                      Total Amount
-                    </p>
-                    <p className="text-emerald-400 font-bold text-xl">
-                      ₹
-                      {(
-                        selectedBooking.totalAmount ||
-                        selectedBooking.totalPrice
-                      ).toLocaleString()}
-                    </p>
-                  </div>
+                {/* Trip Info */}
+                <div className="grid grid-cols-2 gap-6">
+                  <InfoBox
+                    label="Expedition"
+                    value={selectedBooking.tripTitle}
+                  />
+                  <InfoBox
+                    label="Date"
+                    value={new Date(selectedBooking.date).toLocaleDateString()}
+                  />
+                  <InfoBox
+                    label="Team Size"
+                    value={`${selectedBooking.seats} People`}
+                  />
+                  <InfoBox
+                    label="Total Amount"
+                    value={`₹${Number(selectedBooking.amount).toLocaleString()}`}
+                    isHighlight
+                  />
                 </div>
 
-                {/* Section 2: User Intel */}
+                {/* User Intel */}
                 <div>
                   <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                     <User size={18} className="text-blue-500" /> Explorer Data
                   </h3>
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
-                    <div className="flex justify-between border-b border-slate-700 pb-2">
-                      <span className="text-slate-400">Full Name</span>
-                      <span className="text-white">
-                        {selectedBooking.userDetails?.name}
-                      </span>
-                    </div>
+                    <Row
+                      label="Full Name"
+                      value={selectedBooking.customerName}
+                    />
                     <div className="flex justify-between border-b border-slate-700 pb-2">
                       <span className="text-slate-400">Phone</span>
                       <div className="flex gap-3">
                         <span className="text-white">
-                          {selectedBooking.userDetails?.phone}
+                          {selectedBooking.phone}
                         </span>
                         <a
-                          href={`tel:${selectedBooking.userDetails?.phone}`}
-                          className="text-emerald-500 hover:text-emerald-400"
+                          href={`tel:${selectedBooking.phone}`}
+                          className="text-emerald-500"
                         >
                           <Phone size={16} />
                         </a>
                         <a
-                          href={`https://wa.me/91${selectedBooking.userDetails?.phone}`}
+                          href={`https://wa.me/91${selectedBooking.phone}`}
                           target="_blank"
-                          className="text-green-500 hover:text-green-400"
+                          rel="noreferrer"
+                          className="text-green-500"
                         >
                           <MessageCircle size={16} />
                         </a>
                       </div>
                     </div>
-                    <div className="flex justify-between border-b border-slate-700 pb-2">
-                      <span className="text-slate-400">Email</span>
-                      <span className="text-white">
-                        {selectedBooking.userDetails?.email || "N/A"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-slate-700 pb-2">
-                      <span className="text-slate-400">Address</span>
-                      <span className="text-white max-w-[200px] text-right">
-                        {selectedBooking.userDetails?.address}
-                      </span>
-                    </div>
-                    <div className="flex justify-between pt-1">
-                      <span className="text-slate-400">Identity (Aadhar)</span>
-                      <span className="text-slate-300 font-mono">
-                        {selectedBooking.userDetails?.aadhar || "N/A"}
-                      </span>
-                    </div>
+                    <Row label="Email" value={selectedBooking.email} />
+                    <Row label="Address" value={selectedBooking.address} />
+                    <Row
+                      label="Identity (Aadhar)"
+                      value={selectedBooking.aadhar}
+                    />
                   </div>
                 </div>
 
-                {/* Section 3: Payment Intel */}
+                {/* Payment Intel */}
                 <div>
                   <h3 className="text-white font-bold mb-4 flex items-center gap-2">
                     <CreditCard size={18} className="text-purple-500" />{" "}
                     Transaction Log
                   </h3>
                   <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Method</span>
-                      <span className="text-white uppercase font-bold">
-                        {selectedBooking.paymentMethod ||
-                          selectedBooking.userDetails?.paymentMethod ||
-                          "Manual"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Transaction ID</span>
-                      <span className="text-blue-400 font-mono text-xs">
-                        {selectedBooking.paymentId || "PENDING"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Order ID</span>
-                      <span className="text-slate-500 font-mono text-xs">
-                        {selectedBooking.orderId || "-"}
-                      </span>
-                    </div>
+                    <Row
+                      label="Method"
+                      value={selectedBooking.paymentMethod}
+                      isCaps
+                    />
+                    <Row
+                      label="Transaction ID"
+                      value={selectedBooking.paymentId}
+                      isMono
+                      color="text-blue-400"
+                    />
+                    <Row
+                      label="Order ID"
+                      value={selectedBooking.orderId}
+                      isMono
+                    />
+                    <Row
+                      label="Gateway"
+                      value={selectedBooking.gateway}
+                      isCaps
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Modal Actions */}
               <div className="p-6 border-t border-slate-800 bg-slate-950 flex justify-between gap-4">
                 <button
                   onClick={() => handleDelete(selectedBooking.id)}
                   className="flex items-center gap-2 text-rose-500 hover:bg-rose-500/10 px-4 py-3 rounded-xl font-bold transition-colors"
                 >
-                  <Trash2 size={18} /> Delete Record
+                  <Trash2 size={18} /> Delete
                 </button>
-
                 <div className="flex gap-3">
                   {selectedBooking.status !== "confirmed" && (
                     <button
                       onClick={() =>
                         handleStatusChange(selectedBooking.id, "confirmed")
                       }
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-emerald-900/20"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2"
                     >
-                      <CheckCircle size={18} /> Confirm Mission
-                    </button>
-                  )}
-                  {selectedBooking.status === "confirmed" && (
-                    <button
-                      onClick={() =>
-                        handleStatusChange(selectedBooking.id, "cancelled")
-                      }
-                      className="bg-rose-600 hover:bg-rose-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-rose-900/20"
-                    >
-                      <XCircle size={18} /> Cancel Mission
+                      <CheckCircle size={18} /> Confirm
                     </button>
                   )}
                 </div>
@@ -582,23 +524,39 @@ const Bookings = () => {
 };
 
 // --- SUB COMPONENTS ---
+const InfoBox = ({ label, value, isHighlight }) => (
+  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+    <p className="text-slate-500 text-xs uppercase mb-1">{label}</p>
+    <p
+      className={`font-bold ${isHighlight ? "text-emerald-400 text-xl" : "text-white"}`}
+    >
+      {value}
+    </p>
+  </div>
+);
+
+const Row = ({ label, value, isCaps, isMono, color }) => (
+  <div className="flex justify-between border-b border-slate-700 pb-2 last:border-0">
+    <span className="text-slate-400">{label}</span>
+    <span
+      className={`text-white text-right ${isCaps ? "uppercase font-bold" : ""} ${isMono ? "font-mono text-xs" : ""} ${color || ""}`}
+    >
+      {value}
+    </span>
+  </div>
+);
+
 const StatusBadge = ({ status }) => {
   const styles = {
     pending: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     confirmed: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     cancelled: "bg-rose-500/10 text-rose-400 border-rose-500/20",
   };
-  const icons = {
-    pending: <Clock size={12} />,
-    confirmed: <CheckCircle size={12} />,
-    cancelled: <XCircle size={12} />,
-  };
-
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${styles[status] || styles.pending} uppercase tracking-wider`}
+      className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${styles[status] || styles.pending} uppercase tracking-wider`}
     >
-      {icons[status] || icons.pending} {status}
+      {status}
     </span>
   );
 };
