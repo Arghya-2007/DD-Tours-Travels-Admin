@@ -5,6 +5,7 @@ import {
   Loader2,
   Plus,
   MapPin,
+  Clock, // Added Clock icon
   CheckCircle2,
   XCircle,
 } from "lucide-react";
@@ -17,10 +18,12 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     duration: "",
     location: "",
     description: "",
-    // NEW FIELDS
     fixedDate: "",
     expectedMonth: "",
-    bookingEndsIn: "",
+    // CHANGED: bookingEndsIn -> bookingDeadline
+    bookingDeadline: "",
+    // NEW: Status field
+    status: "upcoming",
   });
 
   // Tag States
@@ -45,7 +48,10 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         description: initialData.description || "",
         fixedDate: initialData.fixedDate || "",
         expectedMonth: initialData.expectedMonth || "",
-        bookingEndsIn: initialData.bookingEndsIn || "",
+        // Handle fallback if old data used "bookingEndsIn"
+        bookingDeadline:
+          initialData.bookingDeadline || initialData.bookingEndsIn || "",
+        status: initialData.status || "upcoming",
       });
       setIncludedItems(initialData.includedItems || []);
       setPlacesCovered(initialData.placesCovered || []);
@@ -67,7 +73,8 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         description: "",
         fixedDate: "",
         expectedMonth: "",
-        bookingEndsIn: "",
+        bookingDeadline: "",
+        status: "upcoming",
       });
       setIncludedItems([]);
       setPlacesCovered([]);
@@ -273,23 +280,57 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     placeholder="5 Days / 4 Nights"
                   />
                 </div>
+
+                {/* --- UPDATED: REAL TIME DEADLINE --- */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    Booking Ends
+                  <label className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+                    <Clock size={12} /> Booking Deadline
                   </label>
                   <input
-                    value={formData.bookingEndsIn}
+                    type="datetime-local"
+                    value={formData.bookingDeadline}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        bookingEndsIn: e.target.value,
+                        bookingDeadline: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600"
-                    placeholder="2 days before"
+                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-red-500 outline-none text-white scheme-dark"
                   />
                 </div>
               </div>
+
+              {/* --- NEW: STATUS SELECTOR (For Stability Features) --- */}
+              {initialData && (
+                <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+                      Trip Status (Lifecycle)
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) =>
+                        setFormData({ ...formData, status: e.target.value })
+                      }
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-blue-500 text-white outline-none"
+                    >
+                      <option value="upcoming">
+                        🚀 Upcoming (Taking Bookings)
+                      </option>
+                      <option value="ongoing">
+                        🚙 Ongoing (Trip in Progress)
+                      </option>
+                      <option value="completed">
+                        ✅ Completed (Allow User Ratings)
+                      </option>
+                    </select>
+                    <p className="text-[10px] text-slate-500">
+                      Marking as "Completed" will enable the Rate feature for
+                      users.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* SECTION 3: SCHEDULING (Dynamic) */}
               <div className="p-5 bg-slate-800/40 rounded-2xl border border-slate-700/50 grid grid-cols-1 md:grid-cols-2 gap-6">
