@@ -7,9 +7,9 @@ import Trips from "./pages/Trips";
 import Users from "./pages/Users";
 import Bookings from "./pages/Bookings";
 import Settings from "./pages/Settings";
-import Blogs from "./pages/AdminBlogs";
+// 🔴 FIX 1: Import it with the name you use below (AdminBlogs)
+import AdminBlogs from "./pages/AdminBlogs";
 
-// Simple "Guard" component to check if logged in
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem("token");
   if (!token) return <Navigate to="/login" replace />;
@@ -32,10 +32,14 @@ function App() {
             </ProtectedRoute>
           }
         >
+          {/* Note: No "/" at the start of these paths */}
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="trips" element={<Trips />} />
           <Route path="bookings" element={<Bookings />} />
-          <Route path="/admin/blogs" element={<AdminBlogs />} />
+
+          {/* 🔴 FIX 2: Use relative path "blogs" (Result: /admin/blogs) */}
+          <Route path="blogs" element={<AdminBlogs />} />
+
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  FileText, // 👈 ADDED THIS IMPORT
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -21,12 +22,12 @@ const Sidebar = () => {
 
   const adminEmail = localStorage.getItem("adminEmail") || "admin@ddtours.com";
 
-  // 1. Dynamic Resize Listener (Fixes the rotation/resize bug)
+  // 1. Dynamic Resize Listener
   useEffect(() => {
     const handleResize = () => {
       const desktop = window.innerWidth >= 1024;
       setIsDesktop(desktop);
-      if (desktop) setIsMobileOpen(false); // Force close mobile menu on desktop
+      if (desktop) setIsMobileOpen(false);
     };
 
     window.addEventListener("resize", handleResize);
@@ -50,7 +51,7 @@ const Sidebar = () => {
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Trips Management", path: "/admin/trips", icon: Map },
     { name: "Bookings", path: "/admin/bookings", icon: CalendarCheck },
-    {name: "Blog Posts", path: "/admin/blogs", icon: FileText },
+    { name: "Blog Posts", path: "/admin/blogs", icon: FileText }, // ✅ Now this works
     { name: "User Base", path: "/admin/users", icon: Users },
     { name: "System Settings", path: "/admin/settings", icon: Settings },
   ];
@@ -108,7 +109,7 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* --- MOBILE TRIGGER (Floating Glass Button) --- */}
+      {/* --- MOBILE TRIGGER --- */}
       {!isDesktop && (
         <div className="fixed top-4 left-4 z-50">
           <button
