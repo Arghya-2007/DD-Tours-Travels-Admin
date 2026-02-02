@@ -50,6 +50,7 @@ const Sidebar = () => {
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Trips Management", path: "/admin/trips", icon: Map },
     { name: "Bookings", path: "/admin/bookings", icon: CalendarCheck },
+    {name: "Blog Posts", path: "/admin/blogs", icon: FileText },
     { name: "User Base", path: "/admin/users", icon: Users },
     { name: "System Settings", path: "/admin/settings", icon: Settings },
   ];

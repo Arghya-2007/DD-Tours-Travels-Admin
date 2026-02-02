@@ -7,6 +7,7 @@ import Trips from "./pages/Trips";
 import Users from "./pages/Users";
 import Bookings from "./pages/Bookings";
 import Settings from "./pages/Settings";
+import Blogs from "./pages/AdminBlogs";
 
 // Simple "Guard" component to check if logged in
 const ProtectedRoute = ({ children }) => {
@@ -34,6 +35,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="trips" element={<Trips />} />
           <Route path="bookings" element={<Bookings />} />
+          <Route path="/admin/blogs" element={<AdminBlogs />} />
           <Route path="users" element={<Users />} />
           <Route path="settings" element={<Settings />} />
         </Route>
