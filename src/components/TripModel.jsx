@@ -5,11 +5,25 @@ import {
   Loader2,
   Plus,
   MapPin,
-  Clock, // Added Clock icon
+  Clock,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// --- HELPER: FORMAT DATE FOR INPUT ---
+// Converts ISO string to "YYYY-MM-DDTHH:mm"
+// Returns "" if the data is old text like "20 days left"
+const formatForInput = (isoString) => {
+  if (!isoString) return "";
+
+  // Test if it looks like a date (and not just text like "20 days left")
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return ""; // Return empty if invalid date
+
+  // Return formatted string for input
+  return date.toISOString().slice(0, 16); // "2026-05-20T14:30"
+};
 
 const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
   const [formData, setFormData] = useState({
@@ -20,9 +34,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     description: "",
     fixedDate: "",
     expectedMonth: "",
-    // CHANGED: bookingEndsIn -> bookingDeadline
     bookingDeadline: "",
-    // NEW: Status field
     status: "upcoming",
   });
 
@@ -40,6 +52,12 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
   useEffect(() => {
     if (initialData) {
+      // 🛠️ FIX: Safely parse the deadline.
+      // If it's "20 days left", it becomes "" so the Date Picker doesn't crash.
+      const safeDeadline = initialData.bookingDeadline
+        ? formatForInput(initialData.bookingDeadline)
+        : formatForInput(initialData.bookingEndsIn);
+
       setFormData({
         title: initialData.title || "",
         price: initialData.price || "",
@@ -48,9 +66,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         description: initialData.description || "",
         fixedDate: initialData.fixedDate || "",
         expectedMonth: initialData.expectedMonth || "",
-        // Handle fallback if old data used "bookingEndsIn"
-        bookingDeadline:
-          initialData.bookingDeadline || initialData.bookingEndsIn || "",
+        bookingDeadline: safeDeadline,
         status: initialData.status || "upcoming",
       });
       setIncludedItems(initialData.includedItems || []);
@@ -300,7 +316,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                 </div>
               </div>
 
-              {/* --- NEW: STATUS SELECTOR (For Stability Features) --- */}
+              {/* --- STATUS SELECTOR --- */}
               {initialData && (
                 <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
                   <div className="space-y-2">
