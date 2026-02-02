@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast, Toaster } from "react-hot-toast";
 import { gsap } from "gsap";
-import TripModal from "../components/TripModal";
+import TripModal from "../components/TripModel";
 
 const Trips = () => {
   const [trips, setTrips] = useState([]);
