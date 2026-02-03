@@ -16,6 +16,8 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  MoreVertical,
+  Globe,
 } from "lucide-react";
 import { toast, Toaster } from "react-hot-toast";
 import { gsap } from "gsap";
@@ -30,32 +32,32 @@ const Trips = () => {
 
   // Refs for GSAP
   const containerRef = useRef(null);
-  const cardsRef = useRef([]);
 
   useEffect(() => {
     loadTrips();
   }, []);
 
-  // GSAP Animation Trigger when trips are loaded
+  // GSAP Animation Trigger
   useEffect(() => {
     if (!loading && trips.length > 0) {
       const ctx = gsap.context(() => {
         gsap.fromTo(
           ".trip-card",
-          { y: 50, opacity: 0, scale: 0.9 },
+          { y: 30, opacity: 0, scale: 0.95 },
           {
             y: 0,
             opacity: 1,
             scale: 1,
-            duration: 0.6,
+            duration: 0.5,
             stagger: 0.1,
-            ease: "back.out(1.2)",
+            ease: "power2.out",
+            clearProps: "all", // Important for hover effects to work after animation
           },
         );
       }, containerRef);
       return () => ctx.revert();
     }
-  }, [loading, trips, searchTerm]);
+  }, [loading, trips]); // Removed searchTerm to prevent re-animating on every keystroke
 
   const loadTrips = async () => {
     try {
@@ -69,35 +71,46 @@ const Trips = () => {
   };
 
   const handleFormSubmit = async (formData) => {
+    const loadingToast = toast.loading(
+      editingTrip ? "Updating mission..." : "Initializing new mission...",
+    );
     try {
       if (editingTrip) {
         await updateTrip(editingTrip.id, formData);
-        toast.success("Mission updated successfully!");
+        toast.success("Mission parameters updated!", { id: loadingToast });
       } else {
         await createTrip(formData);
-        toast.success("New Expedition created!");
+        toast.success("New Expedition initialized!", { id: loadingToast });
       }
       loadTrips();
       setIsModalOpen(false);
     } catch (error) {
-      toast.error("Operation failed.");
+      toast.error("Operation failed.", { id: loadingToast });
     }
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Are you sure you want to cancel this mission permanently?")) {
+    if (
+      confirm("⚠️ WARNING: This will permanently delete the mission. Confirm?")
+    ) {
+      const loadingToast = toast.loading("Deleting mission...");
       try {
         await deleteTrip(id);
-        // Animate out before removing from state
+
+        // Animate out
         gsap.to(`#card-${id}`, {
-          scale: 0,
+          scale: 0.9,
           opacity: 0,
+          height: 0,
+          marginBottom: 0,
           duration: 0.3,
-          onComplete: () => setTrips((prev) => prev.filter((t) => t.id !== id)),
+          onComplete: () => {
+            setTrips((prev) => prev.filter((t) => t.id !== id));
+            toast.success("Mission deleted.", { id: loadingToast });
+          },
         });
-        toast.success("Mission deleted.");
       } catch (error) {
-        toast.error("Could not delete.");
+        toast.error("Could not delete.", { id: loadingToast });
       }
     }
   };
@@ -112,39 +125,43 @@ const Trips = () => {
         position="bottom-right"
         toastOptions={{
           style: {
-            background: "#0f172a",
+            background: "#1c1917",
             color: "#fff",
-            border: "1px solid #334155",
+            border: "1px solid #333",
           },
         }}
       />
 
-      {/* --- HEADER --- */}
+      {/* --- HEADER SECTION --- */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end mb-10 gap-6">
         <div>
-          <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tight mb-2">
-            Expedition Control
-          </h1>
-          <p className="text-slate-400 font-medium max-w-lg">
-            Manage your active missions, flight paths, and crew assignments from
-            a single command center.
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
+              <Globe size={24} />
+            </div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              Expedition Control
+            </h1>
+          </div>
+          <p className="text-slate-400 font-medium max-w-lg text-sm ml-1">
+            Manage active missions, flight paths, and crew assignments.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
-          {/* Glass Search Bar */}
+          {/* Search Bar */}
           <div className="relative group w-full sm:w-80">
-            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-orange-500/10 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
             <Search
-              className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-blue-400 transition-colors"
-              size={20}
+              className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-orange-400 transition-colors"
+              size={18}
             />
             <input
               type="text"
-              placeholder="Search expeditions..."
+              placeholder="Search active missions..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-2xl focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 outline-none text-slate-200 placeholder-slate-600 transition-all relative z-10"
+              className="w-full pl-11 pr-4 py-3 bg-[#1c1917] border border-white/10 rounded-xl focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none text-slate-200 placeholder-slate-600 transition-all text-sm shadow-xl"
             />
           </div>
 
@@ -154,19 +171,23 @@ const Trips = () => {
               setEditingTrip(null);
               setIsModalOpen(true);
             }}
-            className="relative overflow-hidden bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all active:scale-95 group"
+            className="relative overflow-hidden bg-orange-600 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-orange-900/20 flex items-center justify-center gap-2 transition-all active:scale-95 group text-sm"
           >
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-            <Plus size={20} strokeWidth={2.5} />
-            <span className="relative z-10">New Mission</span>
+            <Plus size={18} strokeWidth={3} />
+            <span>New Mission</span>
           </button>
         </div>
       </div>
 
-      {/* --- GRID --- */}
+      {/* --- GRID DISPLAY --- */}
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-slate-500 animate-pulse">
-          Loading Mission Data...
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-96 bg-[#1c1917] rounded-[2rem] animate-pulse border border-white/5"
+            />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
@@ -174,103 +195,94 @@ const Trips = () => {
             <div
               id={`card-${trip.id}`}
               key={trip.id}
-              className="trip-card group relative bg-slate-900/40 backdrop-blur-sm border border-slate-800 rounded-[2rem] overflow-hidden hover:border-slate-600 transition-colors duration-300 flex flex-col h-full"
+              className="trip-card group relative bg-[#1c1917] hover:bg-[#23201e] border border-white/5 hover:border-white/10 rounded-[2rem] overflow-hidden transition-all duration-300 flex flex-col h-full shadow-2xl shadow-black/50"
             >
-              {/* Image Section */}
+              {/* Image Header */}
               <div className="relative h-56 overflow-hidden">
                 <img
                   src={
                     trip.images?.[0]?.url ||
                     trip.imageUrl ||
-                    "https://via.placeholder.com/400x300"
+                    "https://via.placeholder.com/400x300?text=No+Signal"
                   }
                   alt={trip.title}
-                  className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
+                  className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/20 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1c1917] via-transparent to-transparent opacity-90" />
 
-                {/* Price Tag */}
-                <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full text-sm font-bold text-white shadow-xl">
-                  ₹{Number(trip.price).toLocaleString()}
-                </div>
-
-                {/* Status Badge (Logic: If Fixed Date exists, it's Scheduled, else Flexible) */}
+                {/* Status Badge */}
                 <div className="absolute top-4 left-4">
                   {trip.fixedDate ? (
-                    <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
-                      <Calendar size={12} /> Scheduled
+                    <span className="bg-emerald-500/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+                      <Calendar size={10} />{" "}
+                      {new Date(trip.fixedDate).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
                   ) : (
-                    <span className="bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-bold px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
-                      <Clock size={12} /> Flexible
+                    <span className="bg-blue-500/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+                      <Clock size={10} /> Flexible
                     </span>
                   )}
                 </div>
+
+                {/* Price Badge */}
+                <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md border border-white/10 px-3 py-1 rounded-lg text-white font-bold text-lg shadow-xl">
+                  ₹{Number(trip.price).toLocaleString()}
+                </div>
               </div>
 
-              {/* Content Section */}
-              <div className="p-6 flex-1 flex flex-col relative z-10">
-                <h3 className="text-xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors line-clamp-1">
-                  {trip.title}
-                </h3>
+              {/* Card Body */}
+              <div className="p-6 flex-1 flex flex-col relative">
+                <div className="mb-4">
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-orange-500 transition-colors line-clamp-1">
+                    {trip.title}
+                  </h3>
+                  <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
+                    <MapPin size={14} className="text-slate-500" />
+                    <span className="truncate">
+                      {trip.location || "Classified"}
+                    </span>
+                    <span className="w-1 h-1 bg-slate-600 rounded-full mx-1" />
+                    <Clock size={14} className="text-slate-500" />
+                    <span>{trip.duration || "TBA"}</span>
+                  </div>
+                </div>
 
-                {/* Places Covered (Pills) */}
-                <div className="flex flex-wrap gap-2 mb-4 mt-2">
+                {/* Places Pills */}
+                <div className="flex flex-wrap gap-2 mb-6">
                   {trip.placesCovered?.slice(0, 3).map((place, i) => (
                     <span
                       key={i}
-                      className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded-md border border-slate-700"
+                      className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-white/5 px-2 py-1 rounded border border-white/5"
                     >
                       {place}
                     </span>
                   ))}
                   {(trip.placesCovered?.length || 0) > 3 && (
                     <span className="text-[10px] text-slate-500 px-1 py-1">
-                      +{trip.placesCovered.length - 3} more
+                      +{trip.placesCovered.length - 3}
                     </span>
                   )}
                 </div>
 
-                {/* Info Grid */}
-                <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm text-slate-400 mb-6 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
-                  <div className="flex items-center gap-2">
-                    <Clock size={14} className="text-blue-400" />
-                    <span>{trip.duration || "TBA"}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin size={14} className="text-emerald-400" />
-                    <span className="truncate">
-                      {trip.location || "Remote"}
-                    </span>
-                  </div>
-                  {/* New Fields Display */}
-                  <div className="col-span-2 flex items-center gap-2 pt-2 border-t border-slate-700/50">
-                    <AlertCircle size={14} className="text-orange-400" />
-                    <span className="text-slate-300 text-xs">
-                      Bookings end:{" "}
-                      <span className="text-white font-medium">
-                        {trip.bookingEndsIn || "N/A"}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 mt-auto">
+                {/* Footer / Actions */}
+                <div className="mt-auto pt-6 border-t border-white/5 grid grid-cols-2 gap-3">
                   <button
                     onClick={() => {
                       setEditingTrip(trip);
                       setIsModalOpen(true);
                     }}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center gap-2 text-sm border border-slate-700 hover:border-blue-500"
+                    className="py-2.5 rounded-xl bg-white/5 text-slate-300 font-semibold hover:bg-white/10 hover:text-white transition-all duration-300 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
                   >
-                    <Edit2 size={16} /> Edit
+                    <Edit2 size={14} /> Edit
                   </button>
                   <button
                     onClick={() => handleDelete(trip.id)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-300 border border-slate-700 hover:border-red-500/50"
+                    className="py-2.5 rounded-xl bg-red-500/10 text-red-400 font-semibold hover:bg-red-500/20 hover:text-red-300 transition-all duration-300 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={14} /> Delete
                   </button>
                 </div>
               </div>
@@ -279,7 +291,7 @@ const Trips = () => {
         </div>
       )}
 
-      {/* Modal is passed the edit data */}
+      {/* Modal - Kept separate for logic preservation */}
       <TripModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

@@ -11,17 +11,18 @@ import {
   CheckCircle2,
   Shield,
   LayoutDashboard,
+  Globe,
 } from "lucide-react";
 
 // --- Configuration ---
 const BG_SLIDES = [
-  "https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=2070&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=2070&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1469474968028-56623f02e42e?q=80&w=2074&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1516934024742-b461fba47600?q=80&w=2000&auto=format&fit=crop", // Dark Mountain
+  "https://images.unsplash.com/photo-1533240332313-0dbdd31c16ca?q=80&w=2000&auto=format&fit=crop", // Night Camping
+  "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2000&auto=format&fit=crop", // High Peak
 ];
 
 const FIXED_CARD_IMAGE =
-  "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=1935&auto=format&fit=crop";
+  "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=2000&auto=format&fit=crop"; // Starry Mountains
 
 // --- Input Component ---
 const InputField = ({
@@ -35,11 +36,9 @@ const InputField = ({
   setFocusedInput,
 }) => (
   <div className="input-group relative mb-6 group opacity-0 translate-y-4">
-    {" "}
-    {/* GSAP Target: opacity-0 initially */}
     <div
       className={`absolute left-4 top-4 transition-colors duration-300 ${
-        focusedInput === id || value ? "text-blue-600" : "text-gray-400"
+        focusedInput === id || value ? "text-orange-500" : "text-slate-500"
       }`}
     >
       <Icon size={20} />
@@ -51,10 +50,10 @@ const InputField = ({
       onChange={(e) => setValue(e.target.value)}
       onFocus={() => setFocusedInput(id)}
       onBlur={() => setFocusedInput(null)}
-      className={`w-full bg-gray-50 border-2 rounded-xl px-12 py-4 outline-none transition-all duration-300 font-medium text-gray-800 ${
+      className={`w-full bg-[#1c1917] border-2 rounded-xl px-12 py-4 outline-none transition-all duration-300 font-medium text-white placeholder-transparent ${
         focusedInput === id
-          ? "border-blue-500 bg-white shadow-lg shadow-blue-500/10 scale-[1.01]"
-          : "border-gray-200 hover:border-gray-300"
+          ? "border-orange-500 bg-[#252220] shadow-lg shadow-orange-500/10 scale-[1.01]"
+          : "border-white/10 hover:border-white/20"
       }`}
       placeholder=" "
     />
@@ -62,8 +61,8 @@ const InputField = ({
       htmlFor={id}
       className={`absolute left-12 transition-all duration-300 pointer-events-none ${
         focusedInput === id || value
-          ? "-top-2.5 bg-white px-2 text-xs font-bold text-blue-600 rounded-full shadow-sm"
-          : "top-4 text-gray-500 font-medium"
+          ? "-top-2.5 bg-[#1c1917] px-2 text-xs font-bold text-orange-500 rounded-full"
+          : "top-4 text-slate-500 font-medium"
       }`}
     >
       {label}
@@ -81,7 +80,6 @@ const Login = () => {
 
   // Refs for GSAP
   const containerRef = useRef(null);
-  const bgImageRef = useRef(null);
   const cardRef = useRef(null);
   const badgeRef = useRef(null);
 
@@ -96,21 +94,21 @@ const Login = () => {
   // --- GSAP ANIMATIONS ---
   useLayoutEffect(() => {
     let ctx = gsap.context(() => {
-      // 1. Main Card Entrance (Elastic Pop)
+      // 1. Main Card Entrance
       gsap.fromTo(
         cardRef.current,
-        { y: 100, opacity: 0, scale: 0.9 },
+        { y: 100, opacity: 0, scale: 0.95 },
         {
           y: 0,
           opacity: 1,
           scale: 1,
           duration: 1.2,
-          ease: "back.out(1.2)",
+          ease: "power4.out",
           delay: 0.2,
         },
       );
 
-      // 2. Left Side Image Breathing
+      // 2. Image Breathing
       gsap.to(".hero-image", {
         scale: 1.1,
         duration: 20,
@@ -119,11 +117,11 @@ const Login = () => {
         ease: "linear",
       });
 
-      // 3. Floating Badge (Gravity effect)
+      // 3. Floating Badge
       gsap.fromTo(
         badgeRef.current,
         { y: 0 },
-        { y: -15, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" },
+        { y: -10, duration: 2.5, repeat: -1, yoyo: true, ease: "sine.inOut" },
       );
 
       // 4. Staggered Form Elements
@@ -150,13 +148,14 @@ const Login = () => {
 
       // Animate Card Out before navigating
       gsap.to(cardRef.current, {
-        scale: 0.9,
+        scale: 0.95,
         opacity: 0,
-        y: -50,
-        duration: 0.5,
+        y: -30,
+        duration: 0.4,
+        ease: "power2.in",
       });
 
-      setTimeout(() => navigate("/admin/dashboard"), 800);
+      setTimeout(() => navigate("/admin/dashboard"), 600);
     } catch (error) {
       toast.error(error.message || "Invalid Credentials");
 
@@ -181,7 +180,7 @@ const Login = () => {
   return (
     <div
       ref={containerRef}
-      className="relative min-h-screen flex items-center justify-center p-4 font-sans overflow-hidden bg-slate-950"
+      className="relative min-h-screen flex items-center justify-center p-4 font-sans overflow-hidden bg-[#050505]"
     >
       {/* 1. CINEMATIC BACKGROUND SLIDER */}
       <div className="absolute inset-0 z-0">
@@ -197,74 +196,90 @@ const Login = () => {
               className="w-full h-full object-cover"
               alt="Background"
             />
-            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[4px]" />
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
           </div>
         ))}
       </div>
 
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "#1c1917",
+            color: "#fff",
+            border: "1px solid #333",
+          },
+        }}
+      />
 
       {/* 2. MAIN CARD */}
       <div
         ref={cardRef}
-        className="relative z-10 w-full max-w-5xl bg-white h-auto lg:h-[650px] rounded-[35px] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col lg:flex-row"
+        className="relative z-10 w-full max-w-5xl bg-[#0c0a09] h-auto lg:h-[650px] rounded-[32px] border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col lg:flex-row"
       >
-        {/* LEFT SIDE: Visual (Hidden on Mobile) */}
-        <div className="hidden lg:flex w-1/2 relative bg-slate-900 items-center justify-center overflow-hidden">
+        {/* LEFT SIDE: Visual */}
+        <div className="hidden lg:flex w-1/2 relative bg-black items-center justify-center overflow-hidden">
           <img
             src={FIXED_CARD_IMAGE}
-            className="hero-image absolute inset-0 w-full h-full object-cover opacity-80"
+            className="hero-image absolute inset-0 w-full h-full object-cover opacity-60"
             alt="Admin Visual"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-blue-900/90 via-blue-900/20 to-transparent z-10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-orange-900/40 via-transparent to-transparent z-10" />
 
           {/* Floating Glass Badge */}
           <div
             ref={badgeRef}
-            className="relative z-20 bg-white/10 backdrop-blur-md border border-white/20 p-6 rounded-2xl w-64 shadow-2xl"
+            className="relative z-20 bg-black/40 backdrop-blur-xl border border-white/10 p-6 rounded-2xl w-72 shadow-2xl"
           >
             <div className="flex items-center gap-4 mb-4">
-              <div className="bg-white/20 p-3 rounded-xl">
-                <Shield size={24} className="text-white" />
+              <div className="bg-orange-500/20 p-3 rounded-xl border border-orange-500/20">
+                <Shield size={24} className="text-orange-500" />
               </div>
               <div>
-                <h3 className="font-bold text-white text-lg">Admin Portal</h3>
-                <p className="text-blue-200 text-xs">Secure Gateway</p>
+                <h3 className="font-bold text-white text-lg tracking-tight">
+                  Command Portal
+                </h3>
+                <p className="text-slate-400 text-xs">
+                  Restricted Access Level 1
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-emerald-300 text-xs font-semibold bg-emerald-500/20 py-1.5 px-3 rounded-lg w-fit">
-              <CheckCircle2 size={14} />
-              <span>System Operational</span>
+            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold bg-emerald-500/10 py-2 px-3 rounded-lg w-full border border-emerald-500/20">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Systems Operational</span>
             </div>
           </div>
         </div>
 
         {/* RIGHT SIDE: Interactive Form */}
-        <div className="w-full lg:w-1/2 p-8 lg:p-16 flex flex-col justify-center relative bg-white">
+        <div className="w-full lg:w-1/2 p-8 lg:p-16 flex flex-col justify-center relative bg-[#0c0a09]">
           {/* Subtle Glow Effect */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-blue-100 rounded-full blur-3xl opacity-60 pointer-events-none" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none" />
 
           <div className="relative z-10">
             <div className="form-header mb-10 opacity-0 translate-y-4">
-              {" "}
-              {/* GSAP Target */}
-              <div className="flex items-center gap-2 mb-2">
-                <LayoutDashboard className="text-blue-600" size={24} />
-                <span className="text-blue-600 font-bold tracking-widest text-xs uppercase">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="bg-orange-500/10 p-2 rounded-lg">
+                  <Globe className="text-orange-500" size={20} />
+                </div>
+                <span className="text-orange-500 font-bold tracking-[0.2em] text-xs uppercase">
                   DD Tours & Travels
                 </span>
               </div>
-              <h2 className="text-4xl font-extrabold text-slate-800 tracking-tight">
+              <h2 className="text-4xl font-bold text-white tracking-tight">
                 Welcome Back
               </h2>
-              <p className="text-slate-500 mt-2 text-lg">
-                Enter your credentials to access the command center.
+              <p className="text-slate-400 mt-2 text-lg">
+                Enter your credentials to access the terminal.
               </p>
             </div>
 
             <form onSubmit={handleLogin}>
               <InputField
-                label="Email Address"
+                label="Command Email"
                 type="email"
                 value={email}
                 setValue={setEmail}
@@ -275,7 +290,7 @@ const Login = () => {
               />
 
               <InputField
-                label="Password"
+                label="Secure Password"
                 type="password"
                 value={password}
                 setValue={setPassword}
@@ -286,46 +301,44 @@ const Login = () => {
               />
 
               <div className="form-footer flex justify-between items-center mb-8 opacity-0 translate-y-4">
-                {" "}
-                {/* GSAP Target */}
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <div className="relative">
                     <input type="checkbox" className="peer sr-only" />
-                    <div className="w-5 h-5 border-2 border-slate-300 rounded transition-colors peer-checked:bg-blue-600 peer-checked:border-blue-600" />
+                    <div className="w-5 h-5 border-2 border-slate-600 rounded bg-[#1c1917] transition-colors peer-checked:bg-orange-600 peer-checked:border-orange-600" />
                     <CheckCircle2
                       size={12}
                       className="text-white absolute top-1 left-1 opacity-0 peer-checked:opacity-100 transition-opacity"
                     />
                   </div>
-                  <span className="text-sm text-slate-500 group-hover:text-blue-600 transition-colors font-medium">
-                    Remember me
+                  <span className="text-sm text-slate-400 group-hover:text-white transition-colors font-medium">
+                    Keep me signed in
                   </span>
                 </label>
                 <a
                   href="#"
-                  className="text-sm text-blue-600 font-bold hover:text-blue-700 transition-colors"
+                  className="text-sm text-orange-500 font-bold hover:text-orange-400 transition-colors"
                 >
-                  Recovery?
+                  Forgot Password?
                 </a>
               </div>
 
               <button
                 disabled={loading}
-                className="form-footer w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 opacity-0 translate-y-4"
+                className="form-footer w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 opacity-0 translate-y-4"
               >
                 {loading ? (
                   <Loader2 className="animate-spin" />
                 ) : (
                   <>
-                    Sign In <ArrowRight size={20} />
+                    Initialize Session <ArrowRight size={20} />
                   </>
                 )}
               </button>
             </form>
 
             <div className="form-footer mt-12 text-center opacity-0 translate-y-4">
-              <p className="text-xs text-slate-400 font-medium tracking-wide">
-                © 2026 DD TOURS & TRAVELS • SECURE SERVER
+              <p className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+                Secure Connection • {new Date().getFullYear()} DD Tours
               </p>
             </div>
           </div>

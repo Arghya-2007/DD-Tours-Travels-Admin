@@ -11,7 +11,7 @@ import {
   Menu,
   X,
   ChevronRight,
-  FileText, // 👈 ADDED THIS IMPORT
+  FileText,
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -51,7 +51,7 @@ const Sidebar = () => {
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { name: "Trips Management", path: "/admin/trips", icon: Map },
     { name: "Bookings", path: "/admin/bookings", icon: CalendarCheck },
-    { name: "Blog Posts", path: "/admin/blogs", icon: FileText }, // ✅ Now this works
+    { name: "Blog Posts", path: "/admin/blogs", icon: FileText },
     { name: "User Base", path: "/admin/users", icon: Users },
     { name: "System Settings", path: "/admin/settings", icon: Settings },
   ];
@@ -70,7 +70,8 @@ const Sidebar = () => {
         {isActive && (
           <motion.div
             layoutId="active-nav-bg"
-            className="absolute inset-0 bg-gradient-to-r from-blue-600/80 to-indigo-600/80 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] backdrop-blur-md"
+            // 🎨 CHANGED: Blue -> Orange/Amber Gradient for DD Tours Brand
+            className="absolute inset-0 bg-gradient-to-r from-orange-600/20 to-amber-600/10 border-l-4 border-orange-500 rounded-r-xl shadow-[0_0_20px_rgba(234,88,12,0.1)] backdrop-blur-md"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -79,7 +80,7 @@ const Sidebar = () => {
         <div
           className={`relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 ${
             isActive
-              ? "text-white"
+              ? "text-orange-100" // Lighter text for contrast
               : "text-slate-400 hover:text-white hover:bg-white/5"
           }`}
         >
@@ -87,8 +88,8 @@ const Sidebar = () => {
             size={20}
             className={`transition-colors duration-300 ${
               isActive
-                ? "text-white"
-                : "text-slate-500 group-hover:text-blue-400"
+                ? "text-orange-500" // Active Icon Color
+                : "text-slate-500 group-hover:text-orange-400"
             }`}
           />
           <span className="font-medium text-sm tracking-wide">{item.name}</span>
@@ -99,7 +100,7 @@ const Sidebar = () => {
               animate={{ opacity: 1, x: 0 }}
               className="ml-auto"
             >
-              <ChevronRight size={16} className="text-blue-200" />
+              <ChevronRight size={16} className="text-orange-500" />
             </motion.div>
           )}
         </div>
@@ -114,7 +115,7 @@ const Sidebar = () => {
         <div className="fixed top-4 left-4 z-50">
           <button
             onClick={() => setIsMobileOpen(true)}
-            className="p-3 bg-slate-900/80 backdrop-blur-md text-white rounded-xl border border-white/10 shadow-2xl active:scale-95 transition-transform"
+            className="p-3 bg-black/80 backdrop-blur-md text-white rounded-xl border border-white/10 shadow-2xl active:scale-95 transition-transform"
           >
             <Menu size={24} />
           </button>
@@ -129,7 +130,7 @@ const Sidebar = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsMobileOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90]"
           />
         )}
       </AnimatePresence>
@@ -142,20 +143,22 @@ const Sidebar = () => {
           isDesktop ? "desktop" : isMobileOpen ? "mobileOpen" : "mobileClosed"
         }
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className={`fixed left-0 top-0 h-screen bg-[#0f172a]/95 backdrop-blur-xl border-r border-white/5 flex flex-col z-[100] shadow-2xl font-sans`}
+        // 🎨 CHANGED: Darker background (#0c0a09) to match layout
+        className={`fixed left-0 top-0 h-screen bg-[#0c0a09]/95 backdrop-blur-2xl border-r border-white/10 flex flex-col z-[100] shadow-2xl font-sans`}
       >
         {/* BRAND HEADER */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+              {/* Logo Box */}
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(245,158,11,0.4)]">
                 DD
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">
                   DD TOURS
                 </h1>
-                <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">
+                <p className="text-[10px] text-orange-400 uppercase tracking-widest font-bold">
                   Command Center
                 </p>
               </div>
@@ -188,7 +191,7 @@ const Sidebar = () => {
         <div className="p-4 border-t border-white/5 bg-black/20">
           <div className="bg-white/5 rounded-xl p-3 flex items-center justify-between border border-white/5 hover:border-white/10 transition-colors cursor-pointer group">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-xs shadow-lg">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 flex items-center justify-center text-white font-bold text-xs shadow-lg ring-1 ring-white/10">
                 {adminEmail.charAt(0).toUpperCase()}
               </div>
               <div className="flex flex-col min-w-0">

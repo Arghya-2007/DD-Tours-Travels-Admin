@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import api from "../services/api"; // Your Axios instance
+import api from "../services/api";
 import {
   TrendingUp,
   Users,
@@ -9,7 +9,10 @@ import {
   ArrowDownRight,
   Activity,
   MoreHorizontal,
-  Loader, // Added for loading state
+  Loader,
+  MapPin,
+  Clock,
+  ShieldAlert,
 } from "lucide-react";
 import {
   AreaChart,
@@ -21,6 +24,7 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  Cell,
 } from "recharts";
 import { motion } from "framer-motion";
 
@@ -37,7 +41,7 @@ const Dashboard = () => {
   const [recentActivity, setRecentActivity] = useState([]);
   const [popularDestinations, setPopularDestinations] = useState([]);
 
-  // --- DATA PROCESSING HELPERS ---
+  // --- HELPERS ---
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -52,20 +56,18 @@ const Dashboard = () => {
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
 
-    if (minutes < 60) return `${minutes} min ago`;
-    if (hours < 24) return `${hours} hours ago`;
-    return `${days} days ago`;
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
   };
 
-  // --- FETCH DATA ---
+  // --- DATA FETCHING & PROCESSING ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Parallel Fetch: Bookings and Users
-        // Note: Assuming you have a /users endpoint. If not, we'll estimate from bookings.
         const [bookingsRes, usersRes] = await Promise.allSettled([
           api.get("/bookings/all"),
-          api.get("/users"), // Or /api/users/all depending on your route
+          api.get("/users"), // Adjust if your endpoint is different
         ]);
 
         const bookings =
@@ -85,10 +87,13 @@ const Dashboard = () => {
   }, []);
 
   const processDashboardData = (bookings, users) => {
-    // 1. CALCULATE TOP STATS
+    // 1. STATS
     const totalRevenue = bookings
       .filter((b) => b.status === "confirmed")
-      .reduce((acc, curr) => acc + (Number(curr.totalPrice) || 0), 0);
+      .reduce(
+        (acc, curr) => acc + (Number(curr.totalPrice || curr.totalAmount) || 0),
+        0,
+      );
 
     const activeCount = bookings.filter(
       (b) => b.status === "confirmed" || b.status === "pending",
@@ -99,11 +104,11 @@ const Dashboard = () => {
     setStats({
       revenue: totalRevenue,
       activeBookings: activeCount,
-      totalUsers: users.length || bookings.length, // Fallback to booking count if user fetch fails
+      totalUsers: users.length || 0, // Fallback handled in UI
       pendingTrips: pendingCount,
     });
 
-    // 2. PROCESS CHART DATA (Group by Month)
+    // 2. CHART DATA (Revenue Curve)
     const months = [
       "Jan",
       "Feb",
@@ -119,8 +124,6 @@ const Dashboard = () => {
       "Dec",
     ];
     const currentYear = new Date().getFullYear();
-
-    // Create a map for the current year's months
     const chartMap = new Array(12).fill(0).map((_, i) => ({
       name: months[i],
       revenue: 0,
@@ -128,69 +131,63 @@ const Dashboard = () => {
     }));
 
     bookings.forEach((b) => {
-      const date = new Date(b.createdAt || b.date); // Fallback to trip date if created missing
+      const date = new Date(b.createdAt || b.date);
       if (date.getFullYear() === currentYear) {
         const monthIndex = date.getMonth();
         chartMap[monthIndex].bookings += 1;
         if (b.status === "confirmed") {
-          chartMap[monthIndex].revenue += Number(b.totalPrice) || 0;
+          chartMap[monthIndex].revenue +=
+            Number(b.totalPrice || b.totalAmount) || 0;
         }
       }
     });
 
-    // Slice to current month + previous 6 months for cleaner view
+    // Show last 6 months + current
     const currentMonth = new Date().getMonth();
     const startMonth = Math.max(0, currentMonth - 6);
     setChartData(chartMap.slice(startMonth, currentMonth + 1));
 
-    // 3. RECENT ACTIVITY (Top 5 newest)
+    // 3. RECENT ACTIVITY
     const sortedBookings = [...bookings].sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
     const activityFeed = sortedBookings.slice(0, 5).map((b) => ({
-      id: b.id,
+      id: b.id || b._id,
       user: b.userDetails?.name || "Guest User",
-      action: b.status === "cancelled" ? "cancelled" : "booked",
-      target: b.tripTitle || "Trip",
+      action: b.status,
+      target: b.tripTitle || "Unknown Expedition",
       time: getTimeAgo(b.createdAt),
-      amount: formatCurrency(b.totalPrice),
+      amount: formatCurrency(b.totalPrice || b.totalAmount),
     }));
     setRecentActivity(activityFeed);
 
     // 4. POPULAR DESTINATIONS
     const destCounts = {};
     bookings.forEach((b) => {
-      // Clean title string to group similar trips
       const title = b.tripTitle || "Unknown Trip";
       if (!destCounts[title]) {
         destCounts[title] = { name: title, bookings: 0, revenue: 0 };
       }
       destCounts[title].bookings += 1;
       if (b.status === "confirmed") {
-        destCounts[title].revenue += Number(b.totalPrice) || 0;
+        destCounts[title].revenue += Number(b.totalPrice || b.totalAmount) || 0;
       }
     });
 
-    // Convert to array, sort by bookings, take top 3
     const topDestinations = Object.values(destCounts)
       .sort((a, b) => b.bookings - a.bookings)
       .slice(0, 3)
       .map((d, i) => ({
         ...d,
-        revenue: formatCurrency(d.revenue),
-        color:
-          i === 0
-            ? "bg-blue-500"
-            : i === 1
-              ? "bg-purple-500"
-              : "bg-emerald-500",
+        revenueFormatted: formatCurrency(d.revenue),
+        rank: i + 1,
       }));
 
     setPopularDestinations(topDestinations);
   };
 
-  // --- ANIMATION VARIANTS ---
+  // --- ANIMATIONS ---
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -198,93 +195,114 @@ const Dashboard = () => {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 50 } },
   };
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-900">
-        <Loader className="animate-spin text-blue-500" size={48} />
+      <div className="flex h-screen w-full items-center justify-center bg-[#0c0a09]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader className="animate-spin text-orange-500" size={48} />
+          <p className="text-slate-500 text-sm animate-pulse tracking-widest uppercase">
+            Initializing Command Center...
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto min-h-screen p-4">
+    <div className="w-full relative min-h-screen">
       {/* --- HEADER --- */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">
-          Dashboard Overview
-        </h1>
-        <p className="text-slate-400 mt-2 font-medium">
-          Welcome back, Admin. Here's what's happening today.
-        </p>
+      <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
+        <div>
+          <h1 className="text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
+            Command Center
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+          </h1>
+          <p className="text-slate-400 mt-2 font-medium">
+            System Status:{" "}
+            <span className="text-emerald-400 font-bold">OPERATIONAL</span>
+          </p>
+        </div>
+        <div className="text-right hidden md:block">
+          <p className="text-sm text-slate-500 font-mono">
+            {new Date().toDateString()}
+          </p>
+          <p className="text-xs text-orange-500 font-bold uppercase tracking-widest mt-1">
+            Admin Mode
+          </p>
+        </div>
       </div>
 
       <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="space-y-6"
+        className="space-y-8"
       >
         {/* --- 1. STATS GRID --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <StatCard
             title="Total Revenue"
             value={formatCurrency(stats.revenue)}
-            trend="YTD" // Year to Date
+            trend="+12% vs last mo"
             isPositive={true}
             icon={DollarSign}
-            color="emerald"
+            color="emerald" // Green for money
           />
           <StatCard
             title="Active Bookings"
             value={stats.activeBookings}
-            trend="Active"
+            trend="Live Operations"
             isPositive={true}
             icon={Calendar}
+            color="orange" // Brand color for primary metric
+          />
+          <StatCard
+            title="Total Operatives"
+            value={stats.totalUsers || "--"}
+            trend="Growing"
+            isPositive={true}
+            icon={Users}
             color="blue"
           />
           <StatCard
-            title="Total Users"
-            value={stats.totalUsers}
-            trend="Total"
-            isPositive={true} // Defaulting to positive
-            icon={Users}
-            color="purple"
-          />
-          <StatCard
-            title="Pending Trips"
+            title="Pending Actions"
             value={stats.pendingTrips}
-            trend={stats.pendingTrips > 0 ? "Action Needed" : "All Clear"}
+            trend={stats.pendingTrips > 0 ? "Requires Attention" : "All Clear"}
             isPositive={stats.pendingTrips === 0}
-            icon={Activity}
-            color="amber"
+            icon={stats.pendingTrips > 0 ? ShieldAlert : Activity}
+            color={stats.pendingTrips > 0 ? "red" : "gray"}
           />
         </div>
 
-        {/* --- 2. CHARTS SECTION --- */}
+        {/* --- 2. MAIN CHARTS --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Chart (Revenue) */}
+          {/* Revenue Chart */}
           <motion.div
             variants={itemVariants}
-            className="lg:col-span-2 bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl flex flex-col"
+            className="lg:col-span-2 bg-[#1c1917] rounded-[2rem] p-8 border border-white/5 shadow-2xl relative overflow-hidden"
           >
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-8 relative z-10">
               <div>
-                <h3 className="text-lg font-bold text-white">
-                  Revenue Analytics
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <TrendingUp size={20} className="text-orange-500" /> Revenue
+                  Trajectory
                 </h3>
-                <p className="text-sm text-slate-400">
-                  Monthly earnings overview ({new Date().getFullYear()})
+                <p className="text-xs text-slate-500 uppercase tracking-widest mt-1">
+                  Financial Performance ({new Date().getFullYear()})
                 </p>
               </div>
-              <button className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 transition-colors">
+              <button className="p-2 hover:bg-white/5 rounded-full text-slate-400 transition-colors">
                 <MoreHorizontal size={20} />
               </button>
             </div>
 
-            <div className="h-75 w-full min-w-0">
+            <div className="h-80 w-full relative z-10">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -295,42 +313,44 @@ const Dashboard = () => {
                       x2="0"
                       y2="1"
                     >
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#ea580c" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="#334155"
+                    stroke="#333"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="name"
-                    stroke="#94a3b8"
+                    stroke="#64748b"
                     axisLine={false}
                     tickLine={false}
                     dy={10}
+                    fontSize={12}
                   />
                   <YAxis
-                    stroke="#94a3b8"
+                    stroke="#64748b"
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(value) => `₹${value / 1000}k`}
+                    fontSize={12}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#1e293b",
-                      border: "1px solid #334155",
+                      backgroundColor: "#0c0a09",
+                      border: "1px solid #333",
                       borderRadius: "12px",
                       color: "#fff",
                     }}
-                    itemStyle={{ color: "#fff" }}
+                    itemStyle={{ color: "#fb923c" }}
                     formatter={(value) => formatCurrency(value)}
                   />
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#3B82F6"
+                    stroke="#ea580c"
                     strokeWidth={3}
                     fillOpacity={1}
                     fill="url(#colorRevenue)"
@@ -338,118 +358,118 @@ const Dashboard = () => {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            {/* Background Glow */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
           </motion.div>
 
-          {/* Secondary Chart (Bookings Bar) */}
+          {/* Booking Volume Chart */}
           <motion.div
             variants={itemVariants}
-            className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl flex flex-col"
+            className="bg-[#1c1917] rounded-[2rem] p-8 border border-white/5 shadow-2xl flex flex-col"
           >
-            <h3 className="text-lg font-bold text-white mb-2">
+            <h3 className="text-xl font-bold text-white mb-2">
               Booking Volume
             </h3>
-            <p className="text-sm text-slate-400 mb-6">
-              Trips booked per month
+            <p className="text-xs text-slate-500 uppercase tracking-widest mb-8">
+              Trips Confirmed
             </p>
 
-            <div className="h-75 w-full min-w-0">
+            <div className="flex-1 min-h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="#334155"
+                    stroke="#333"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="name"
-                    stroke="#94a3b8"
+                    stroke="#64748b"
                     axisLine={false}
                     tickLine={false}
                     dy={10}
+                    fontSize={10}
                   />
                   <Tooltip
-                    cursor={{ fill: "#334155", opacity: 0.4 }}
+                    cursor={{ fill: "#333", opacity: 0.4 }}
                     contentStyle={{
-                      backgroundColor: "#1e293b",
-                      border: "1px solid #334155",
+                      backgroundColor: "#0c0a09",
+                      border: "1px solid #333",
                       borderRadius: "12px",
                       color: "#fff",
                     }}
                   />
-                  <Bar
-                    dataKey="bookings"
-                    fill="#10B981"
-                    radius={[6, 6, 0, 0]}
-                    barSize={20}
-                  />
+                  <Bar dataKey="bookings" radius={[4, 4, 0, 0]} barSize={12}>
+                    {chartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={index % 2 === 0 ? "#10b981" : "#059669"}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </motion.div>
         </div>
 
-        {/* --- 3. RECENT ACTIVITY & POPULAR TRIPS --- */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Recent Activity Feed */}
+        {/* --- 3. BOTTOM SECTION --- */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pb-10">
+          {/* Recent Intel Feed */}
           <motion.div
             variants={itemVariants}
-            className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl"
+            className="bg-[#1c1917] rounded-[2rem] p-8 border border-white/5 shadow-xl"
           >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-white">Recent Activity</h3>
-              <button className="text-blue-400 text-sm font-bold hover:underline">
-                View All
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Clock size={18} className="text-blue-500" /> Recent Intel
+              </h3>
+              <button className="text-xs font-bold text-blue-500 hover:text-blue-400 uppercase tracking-wider">
+                View Log
               </button>
             </div>
 
             <div className="space-y-6">
               {recentActivity.length === 0 ? (
-                <p className="text-slate-500 text-sm">
-                  No recent activity found.
-                </p>
+                <div className="text-center text-slate-500 py-8">
+                  No recent activity detected.
+                </div>
               ) : (
                 recentActivity.map((item) => (
-                  <div key={item.id} className="flex gap-4 items-start">
+                  <div key={item.id} className="flex gap-4 items-center group">
                     <div
-                      className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
-                        item.action === "booked"
-                          ? "bg-emerald-500"
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-white/5 ${
+                        item.action === "confirmed"
+                          ? "bg-emerald-500/10 text-emerald-500"
                           : item.action === "cancelled"
-                            ? "bg-red-500"
-                            : "bg-blue-500"
+                            ? "bg-red-500/10 text-red-500"
+                            : "bg-amber-500/10 text-amber-500"
                       }`}
-                    />
-
-                    <div className="flex-1">
-                      <p className="text-sm text-slate-300">
-                        <span className="font-bold text-white">
-                          {item.user}
-                        </span>{" "}
-                        {item.action === "booked" && (
-                          <span className="text-emerald-400">
-                            booked a trip
-                          </span>
-                        )}
-                        {item.action === "cancelled" && (
-                          <span className="text-red-400">
-                            cancelled booking
-                          </span>
-                        )}
-                      </p>
-                      {item.target && (
-                        <p className="text-xs font-bold text-slate-500 mt-1">
-                          {item.target}
-                        </p>
+                    >
+                      {item.action === "confirmed" ? (
+                        <ArrowUpRight size={18} />
+                      ) : (
+                        <Activity size={18} />
                       )}
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-xs text-slate-500">{item.time}</p>
-                      {item.amount && (
-                        <p className="text-sm font-bold text-white mt-1">
-                          {item.amount}
-                        </p>
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-300 truncate">
+                        <span className="font-bold text-white">
+                          {item.user}
+                        </span>
+                        <span className="text-slate-500"> • {item.action}</span>
+                      </p>
+                      <p className="text-xs text-slate-500 font-medium truncate">
+                        {item.target}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-slate-500 mb-1">{item.time}</p>
+                      <p className="text-sm font-bold text-white">
+                        {item.amount}
+                      </p>
                     </div>
                   </div>
                 ))
@@ -457,41 +477,42 @@ const Dashboard = () => {
             </div>
           </motion.div>
 
-          {/* Popular Destinations */}
+          {/* Top Targets */}
           <motion.div
             variants={itemVariants}
-            className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl"
+            className="bg-[#1c1917] rounded-[2rem] p-8 border border-white/5 shadow-xl"
           >
-            <h3 className="text-lg font-bold text-white mb-6">
-              Trending Destinations
+            <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2">
+              <MapPin size={18} className="text-purple-500" /> High Value
+              Targets
             </h3>
+
             <div className="space-y-4">
               {popularDestinations.length === 0 ? (
-                <p className="text-slate-500 text-sm">No trending data yet.</p>
+                <div className="text-center text-slate-500 py-8">
+                  No data available.
+                </div>
               ) : (
                 popularDestinations.map((dest, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-slate-700/30 border border-slate-700 hover:bg-slate-700/50 transition-colors"
+                    className="flex items-center gap-5 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
                   >
-                    <div
-                      className={`w-12 h-12 rounded-xl ${dest.color} bg-opacity-20 flex items-center justify-center text-white font-bold`}
-                    >
-                      {i + 1}
+                    <div className="text-2xl font-bold text-slate-600 w-6">
+                      0{dest.rank}
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-bold text-white truncate max-w-37.5">
+                      <h4 className="font-bold text-white text-lg">
                         {dest.name}
                       </h4>
-                      <p className="text-xs text-slate-400">
-                        {dest.bookings} bookings total
+                      <p className="text-xs text-slate-400 uppercase tracking-widest">
+                        {dest.bookings} Bookings Confirmed
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-white">{dest.revenue}</p>
-                      <div className="flex items-center gap-1 text-emerald-400 text-xs">
-                        <TrendingUp size={12} /> Top {i + 1}
-                      </div>
+                      <p className="text-emerald-400 font-bold font-mono">
+                        {dest.revenueFormatted}
+                      </p>
                     </div>
                   </div>
                 ))
@@ -504,50 +525,50 @@ const Dashboard = () => {
   );
 };
 
+// --- SUB COMPONENTS ---
+
 const StatCard = ({ title, value, trend, isPositive, icon: Icon, color }) => {
-  const colorMap = {
-    emerald: "bg-emerald-500/10 text-emerald-500",
-    blue: "bg-blue-500/10 text-blue-500",
-    purple: "bg-purple-500/10 text-purple-500",
-    amber: "bg-amber-500/10 text-amber-500",
+  const colors = {
+    emerald: "text-emerald-400 bg-emerald-500/10",
+    blue: "text-blue-400 bg-blue-500/10",
+    purple: "text-purple-400 bg-purple-500/10",
+    orange: "text-orange-400 bg-orange-500/10",
+    red: "text-red-400 bg-red-500/10",
+    gray: "text-slate-400 bg-slate-500/10",
+    amber: "text-amber-400 bg-amber-500/10",
   };
 
   return (
     <motion.div
       whileHover={{ y: -5 }}
-      className="bg-slate-800 p-6 rounded-3xl border border-slate-700 shadow-lg relative overflow-hidden"
+      className="bg-[#1c1917] p-6 rounded-[2rem] border border-white/5 shadow-lg relative overflow-hidden group"
     >
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-3 rounded-2xl ${colorMap[color]}`}>
+      <div className="flex justify-between items-start mb-4 relative z-10">
+        <div className={`p-3 rounded-2xl ${colors[color] || colors.gray}`}>
           <Icon size={24} strokeWidth={2.5} />
         </div>
-        {isPositive !== null && (
-          <span
-            className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-              isPositive
-                ? "bg-emerald-500/10 text-emerald-400"
-                : "bg-red-500/10 text-red-400"
-            }`}
-          >
-            {isPositive ? (
-              <ArrowUpRight size={12} />
-            ) : (
-              <ArrowDownRight size={12} />
-            )}
-            {trend}
-          </span>
-        )}
+        <span
+          className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border ${isPositive ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}
+        >
+          {isPositive ? (
+            <ArrowUpRight size={10} />
+          ) : (
+            <ArrowDownRight size={10} />
+          )}
+          {trend}
+        </span>
       </div>
 
-      <h3 className="text-3xl font-extrabold text-white mb-1">{value}</h3>
-      <p className="text-slate-400 font-medium text-sm">{title}</p>
+      <div className="relative z-10">
+        <h3 className="text-3xl font-extrabold text-white mb-1">{value}</h3>
+        <p className="text-slate-500 font-bold text-xs uppercase tracking-widest">
+          {title}
+        </p>
+      </div>
 
+      {/* Decorative Glow */}
       <div
-        className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${colorMap[
-          color
-        ]
-          .split(" ")[0]
-          .replace("/10", "")}`}
+        className={`absolute -right-6 -bottom-6 w-32 h-32 rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity ${colors[color]?.split(" ")[0].replace("text-", "bg-")}`}
       />
     </motion.div>
   );

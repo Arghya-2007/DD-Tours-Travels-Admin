@@ -7,22 +7,20 @@ import {
   MapPin,
   Clock,
   CheckCircle2,
-  XCircle,
+  AlertCircle,
+  Calendar,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // --- HELPER: FORMAT DATE FOR INPUT ---
-// Converts ISO string to "YYYY-MM-DDTHH:mm"
-// Returns "" if the data is old text like "20 days left"
 const formatForInput = (isoString) => {
   if (!isoString) return "";
-
-  // Test if it looks like a date (and not just text like "20 days left")
   const date = new Date(isoString);
-  if (isNaN(date.getTime())) return ""; // Return empty if invalid date
-
-  // Return formatted string for input
-  return date.toISOString().slice(0, 16); // "2026-05-20T14:30"
+  if (isNaN(date.getTime())) return "";
+  // Convert to local ISO string for datetime-local input
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60 * 1000);
+  return localDate.toISOString().slice(0, 16);
 };
 
 const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
@@ -52,8 +50,6 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
   useEffect(() => {
     if (initialData) {
-      // 🛠️ FIX: Safely parse the deadline.
-      // If it's "20 days left", it becomes "" so the Date Picker doesn't crash.
       const safeDeadline = initialData.bookingDeadline
         ? formatForInput(initialData.bookingDeadline)
         : formatForInput(initialData.bookingEndsIn);
@@ -80,7 +76,6 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         setPreviews([]);
       }
     } else {
-      // Reset form
       setFormData({
         title: "",
         price: "",
@@ -107,7 +102,6 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     }
   };
 
-  // --- Tag Handlers ---
   const handleAddItem = () => {
     if (newItemInput.trim()) {
       setIncludedItems([...includedItems, newItemInput.trim()]);
@@ -129,7 +123,6 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     const data = new FormData();
     Object.keys(formData).forEach((key) => data.append(key, formData[key]));
 
-    // Append Arrays as JSON strings
     data.append("includedItems", JSON.stringify(includedItems));
     data.append("placesCovered", JSON.stringify(placesCovered));
 
@@ -149,7 +142,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -159,39 +152,43 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
         />
 
         <motion.div
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-slate-900 border border-slate-700 w-full max-w-4xl rounded-3xl shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+          exit={{ scale: 0.95, opacity: 0, y: 20 }}
+          className="bg-[#0c0a09] border border-white/10 w-full max-w-4xl rounded-2xl shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header */}
-          <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 sticky top-0 z-20">
+          <div className="px-8 py-5 border-b border-white/10 flex justify-between items-center bg-[#0c0a09] sticky top-0 z-20">
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">
-                {initialData ? "Edit Expedition" : "New Mission"}
+              <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                {initialData ? (
+                  <Edit2 size={20} className="text-orange-500" />
+                ) : (
+                  <Plus size={20} className="text-orange-500" />
+                )}
+                {initialData
+                  ? "Edit Expedition Parameters"
+                  : "Initialize New Mission"}
               </h2>
-              <p className="text-sm text-slate-400 mt-1">
-                Configure the details for this journey.
-              </p>
             </div>
             <button
               onClick={onClose}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors"
+              className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors"
             >
               <X size={24} />
             </button>
           </div>
 
           {/* Form Body */}
-          <div className="p-8 overflow-y-auto custom-scrollbar bg-slate-900">
+          <div className="p-8 overflow-y-auto custom-scrollbar bg-[#0c0a09]">
             <form id="tripForm" onSubmit={handleSubmit} className="space-y-8">
               {/* SECTION 1: VISUALS */}
               <div className="space-y-4">
-                <label className="block text-xs font-bold text-blue-400 uppercase tracking-wider">
+                <label className="block text-xs font-bold text-orange-500 uppercase tracking-wider">
                   Mission Visuals
                 </label>
                 <div
-                  className={`group relative w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all ${previews.length > 0 ? "h-32 border-blue-500/50 bg-blue-500/10" : "h-48 border-slate-700 hover:border-blue-500 hover:bg-slate-800"}`}
+                  className={`group relative w-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${previews.length > 0 ? "h-32 border-orange-500/50 bg-orange-500/5" : "h-40 border-white/10 hover:border-orange-500 hover:bg-white/5"}`}
                 >
                   <input
                     type="file"
@@ -202,8 +199,8 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                   />
                   {previews.length === 0 ? (
                     <div className="text-center p-4">
-                      <div className="w-14 h-14 bg-slate-800 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-3 border border-slate-700">
-                        <Upload size={24} />
+                      <div className="w-12 h-12 bg-white/5 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-3 border border-white/10">
+                        <Upload size={20} />
                       </div>
                       <p className="text-sm font-semibold text-slate-300">
                         Upload Cover Photos
@@ -211,8 +208,8 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center">
-                      <Upload size={24} className="text-blue-400 mb-2" />
-                      <p className="text-sm font-medium text-blue-300">
+                      <Upload size={24} className="text-orange-500 mb-2" />
+                      <p className="text-sm font-medium text-orange-300">
                         {previews.length} Images Selected
                       </p>
                     </div>
@@ -223,7 +220,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     {previews.map((src, index) => (
                       <div
                         key={index}
-                        className="relative aspect-square rounded-xl overflow-hidden border border-slate-700"
+                        className="relative aspect-square rounded-lg overflow-hidden border border-white/10"
                       >
                         <img
                           src={src}
@@ -239,7 +236,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
               {/* SECTION 2: CORE DETAILS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Mission Title
                   </label>
                   <input
@@ -248,12 +245,12 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     onChange={(e) =>
                       setFormData({ ...formData, title: e.target.value })
                     }
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600 focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-orange-500 outline-none text-white placeholder-slate-600 focus:ring-1 focus:ring-orange-500/50 transition-all"
                     placeholder="e.g. Himalayan Expedition"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Location
                   </label>
                   <input
@@ -261,7 +258,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     onChange={(e) =>
                       setFormData({ ...formData, location: e.target.value })
                     }
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600 focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-orange-500 outline-none text-white placeholder-slate-600 focus:ring-1 focus:ring-orange-500/50 transition-all"
                     placeholder="e.g. Ladakh, India"
                   />
                 </div>
@@ -269,7 +266,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Price (₹)
                   </label>
                   <input
@@ -279,12 +276,12 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     onChange={(e) =>
                       setFormData({ ...formData, price: e.target.value })
                     }
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-orange-500 outline-none text-white placeholder-slate-600 transition-all"
                     placeholder="15000"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Duration
                   </label>
                   <input
@@ -292,12 +289,11 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                     onChange={(e) =>
                       setFormData({ ...formData, duration: e.target.value })
                     }
-                    className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-orange-500 outline-none text-white placeholder-slate-600 transition-all"
                     placeholder="5 Days / 4 Nights"
                   />
                 </div>
 
-                {/* --- UPDATED: REAL TIME DEADLINE --- */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
                     <Clock size={12} /> Booking Deadline
@@ -311,47 +307,41 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                         bookingDeadline: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-red-500 outline-none text-white scheme-dark"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-red-500 outline-none text-white scheme-dark transition-all"
                   />
                 </div>
               </div>
 
-              {/* --- STATUS SELECTOR --- */}
-              {initialData && (
-                <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-blue-400 uppercase tracking-wider">
-                      Trip Status (Lifecycle)
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) =>
-                        setFormData({ ...formData, status: e.target.value })
-                      }
-                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-blue-500 text-white outline-none"
-                    >
-                      <option value="upcoming">
-                        🚀 Upcoming (Taking Bookings)
-                      </option>
-                      <option value="ongoing">
-                        🚙 Ongoing (Trip in Progress)
-                      </option>
-                      <option value="completed">
-                        ✅ Completed (Allow User Ratings)
-                      </option>
-                    </select>
-                    <p className="text-[10px] text-slate-500">
-                      Marking as "Completed" will enable the Rate feature for
-                      users.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* SECTION 3: SCHEDULING (Dynamic) */}
-              <div className="p-5 bg-slate-800/40 rounded-2xl border border-slate-700/50 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* STATUS SELECTOR */}
+              <div className="p-4 bg-orange-500/5 border border-orange-500/20 rounded-xl">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                  <label className="text-xs font-bold text-orange-400 uppercase tracking-wider">
+                    Trip Lifecycle Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) =>
+                      setFormData({ ...formData, status: e.target.value })
+                    }
+                    className="w-full px-4 py-3 bg-[#0c0a09] border border-white/10 rounded-xl focus:border-orange-500 text-white outline-none"
+                  >
+                    <option value="upcoming">
+                      🚀 Upcoming (Taking Bookings)
+                    </option>
+                    <option value="ongoing">
+                      🚙 Ongoing (Trip in Progress)
+                    </option>
+                    <option value="completed">
+                      ✅ Completed (Allow Reviews)
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* SECTION 3: SCHEDULING */}
+              <div className="p-5 bg-white/5 rounded-xl border border-white/10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
                     <CheckCircle2 size={12} /> Fixed Launch Date
                   </label>
                   <input
@@ -364,11 +354,8 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                         expectedMonth: "",
                       })
                     }
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white scheme-dark"
+                    className="w-full px-4 py-3 bg-[#0c0a09] border border-white/10 rounded-xl focus:border-emerald-500 outline-none text-white scheme-dark"
                   />
-                  <p className="text-[10px] text-slate-500">
-                    Select only if specific date is confirmed.
-                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -384,7 +371,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                         expectedMonth: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:border-purple-500 outline-none text-white disabled:opacity-50"
+                    className="w-full px-4 py-3 bg-[#0c0a09] border border-white/10 rounded-xl focus:border-purple-500 outline-none text-white disabled:opacity-50"
                   >
                     <option value="">Select Flexible Month</option>
                     {[
@@ -409,14 +396,14 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                 </div>
               </div>
 
-              {/* SECTION 4: TAGS (Places & Items) */}
+              {/* SECTION 4: TAGS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Places Covered */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                     <MapPin size={12} /> Places Covered
                   </label>
-                  <div className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-xl focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-all min-h-[50px]">
+                  <div className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl focus-within:border-emerald-500 transition-all min-h-[50px]">
                     <div className="flex flex-wrap gap-2 mb-2">
                       {placesCovered.map((place, index) => (
                         <span
@@ -465,7 +452,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                   <label className="text-xs font-bold text-orange-400 uppercase tracking-wider">
                     Included Items
                   </label>
-                  <div className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-xl focus-within:border-orange-500 focus-within:ring-1 focus-within:ring-orange-500/20 transition-all min-h-[50px]">
+                  <div className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl focus-within:border-orange-500 transition-all min-h-[50px]">
                     <div className="flex flex-wrap gap-2 mb-2">
                       {includedItems.map((item, index) => (
                         <span
@@ -512,7 +499,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
 
               {/* Description */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                   Detailed Itinerary
                 </label>
                 <textarea
@@ -521,7 +508,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:border-blue-500 outline-none text-white placeholder-slate-600 resize-none"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-orange-500 outline-none text-white placeholder-slate-600 resize-none transition-all"
                   placeholder="Enter the full mission details..."
                 />
               </div>
@@ -529,10 +516,10 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
           </div>
 
           {/* Footer */}
-          <div className="px-8 py-5 border-t border-slate-800 bg-slate-900 sticky bottom-0 z-20 flex justify-end gap-4">
+          <div className="px-8 py-5 border-t border-white/10 bg-[#0c0a09] sticky bottom-0 z-20 flex justify-end gap-4">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-bold text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
+              className="px-6 py-2.5 rounded-xl font-bold text-slate-400 hover:bg-white/5 hover:text-white transition-all"
             >
               Cancel
             </button>
@@ -540,7 +527,7 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
               type="submit"
               form="tripForm"
               disabled={loading}
-              className="px-8 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/40 active:scale-95 transition-all flex items-center gap-2"
+              className="px-8 py-2.5 rounded-xl font-bold text-white bg-orange-600 hover:bg-orange-500 shadow-lg shadow-orange-900/40 active:scale-95 transition-all flex items-center gap-2"
             >
               {loading ? (
                 <Loader2 className="animate-spin h-5 w-5" />
@@ -556,5 +543,23 @@ const TripModal = ({ isOpen, onClose, onSubmit, initialData }) => {
     </AnimatePresence>
   );
 };
+
+// Simple Icon Import for the Header
+const Edit2 = ({ size, className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+  </svg>
+);
 
 export default TripModal;
